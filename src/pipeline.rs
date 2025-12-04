@@ -3,8 +3,8 @@
 #![allow(private_bounds)]
 #![allow(private_interfaces)]
 
-use std::sync::Arc;
 use async_trait::async_trait;
+use std::sync::Arc;
 use thiserror::Error;
 
 use crate::recorder::{NoopRecorder, Recorder, RunId, RunStatus, StepStatus};
@@ -149,10 +149,13 @@ where
                 Ok(output) => break output,
                 Err(StepError::Permanent(e)) => {
                     recorder
-                        .complete_step(step_id, StepStatus::Failed {
-                            error: e.to_string(),
-                            attempt,
-                        })
+                        .complete_step(
+                            step_id,
+                            StepStatus::Failed {
+                                error: e.to_string(),
+                                attempt,
+                            },
+                        )
                         .await?;
                     return Err(PipelineError::StepFailed {
                         step: step_name,
@@ -164,10 +167,13 @@ where
                         tokio::time::sleep(delay).await;
                     } else {
                         recorder
-                            .complete_step(step_id, StepStatus::Failed {
-                                error: e.to_string(),
-                                attempt,
-                            })
+                            .complete_step(
+                                step_id,
+                                StepStatus::Failed {
+                                    error: e.to_string(),
+                                    attempt,
+                                },
+                            )
                             .await?;
                         return Err(PipelineError::RetriesExhausted {
                             step: step_name,
@@ -179,7 +185,9 @@ where
             }
         };
 
-        recorder.complete_step(step_id, StepStatus::Completed).await?;
+        recorder
+            .complete_step(step_id, StepStatus::Completed)
+            .await?;
 
         // Continue with next steps
         self.next
@@ -219,7 +227,15 @@ where
     O: Send + 'static,
 {
     /// Add the first step to the pipeline.
-    pub fn start_with<S>(self, step: S) -> Pipeline<S::Input, S::Output, ChainedStep<StepWrapper<S>, Identity, S::Input, S::Output, S::Output>>
+    #[allow(clippy::type_complexity)]
+    pub fn start_with<S>(
+        self,
+        step: S,
+    ) -> Pipeline<
+        S::Input,
+        S::Output,
+        ChainedStep<StepWrapper<S>, Identity, S::Input, S::Output, S::Output>,
+    >
     where
         S: Step + 'static,
     {
@@ -314,7 +330,10 @@ where
         start_index: u32,
     ) -> Result<O, PipelineError> {
         // Run first chain
-        let mid = self.first.run(input, run_id, recorder, retry_policy, start_index).await?;
+        let mid = self
+            .first
+            .run(input, run_id, recorder, retry_policy, start_index)
+            .await?;
 
         // Count steps in first chain (hacky but works for now)
         let next_index = start_index + count_chain_steps(&self.first);
@@ -330,10 +349,13 @@ where
                 Ok(output) => break output,
                 Err(StepError::Permanent(e)) => {
                     recorder
-                        .complete_step(step_id, StepStatus::Failed {
-                            error: e.to_string(),
-                            attempt,
-                        })
+                        .complete_step(
+                            step_id,
+                            StepStatus::Failed {
+                                error: e.to_string(),
+                                attempt,
+                            },
+                        )
                         .await?;
                     return Err(PipelineError::StepFailed {
                         step: step_name,
@@ -345,10 +367,13 @@ where
                         tokio::time::sleep(delay).await;
                     } else {
                         recorder
-                            .complete_step(step_id, StepStatus::Failed {
-                                error: e.to_string(),
-                                attempt,
-                            })
+                            .complete_step(
+                                step_id,
+                                StepStatus::Failed {
+                                    error: e.to_string(),
+                                    attempt,
+                                },
+                            )
                             .await?;
                         return Err(PipelineError::RetriesExhausted {
                             step: step_name,
@@ -360,7 +385,9 @@ where
             }
         };
 
-        recorder.complete_step(step_id, StepStatus::Completed).await?;
+        recorder
+            .complete_step(step_id, StepStatus::Completed)
+            .await?;
         Ok(output)
     }
 }
@@ -394,14 +421,25 @@ where
         let entity_id = input.entity_id();
         let run_id = self.recorder.start_run(self.name, &entity_id).await?;
 
-        match self.chain.run(input, run_id, self.recorder.as_ref(), &self.retry_policy, 0).await {
+        match self
+            .chain
+            .run(input, run_id, self.recorder.as_ref(), &self.retry_policy, 0)
+            .await
+        {
             Ok(output) => {
-                self.recorder.complete_run(run_id, RunStatus::Completed).await?;
+                self.recorder
+                    .complete_run(run_id, RunStatus::Completed)
+                    .await?;
                 Ok(output)
             }
             Err(e) => {
                 self.recorder
-                    .complete_run(run_id, RunStatus::Failed { error: e.to_string() })
+                    .complete_run(
+                        run_id,
+                        RunStatus::Failed {
+                            error: e.to_string(),
+                        },
+                    )
                     .await?;
                 Err(e)
             }

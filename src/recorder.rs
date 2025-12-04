@@ -35,7 +35,12 @@ pub trait Recorder: Send + Sync {
     async fn start_run(&self, pipeline_name: &str, entity_id: &str) -> anyhow::Result<RunId>;
 
     /// Record the start of a step execution.
-    async fn start_step(&self, run_id: RunId, step_name: &str, step_index: u32) -> anyhow::Result<StepId>;
+    async fn start_step(
+        &self,
+        run_id: RunId,
+        step_name: &str,
+        step_index: u32,
+    ) -> anyhow::Result<StepId>;
 
     /// Record step completion.
     async fn complete_step(&self, step_id: StepId, status: StepStatus) -> anyhow::Result<()>;
@@ -63,7 +68,12 @@ impl Recorder for NoopRecorder {
         Ok(RunId(0))
     }
 
-    async fn start_step(&self, _run_id: RunId, _step_name: &str, _step_index: u32) -> anyhow::Result<StepId> {
+    async fn start_step(
+        &self,
+        _run_id: RunId,
+        _step_name: &str,
+        _step_index: u32,
+    ) -> anyhow::Result<StepId> {
         Ok(StepId(0))
     }
 

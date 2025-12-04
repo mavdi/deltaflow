@@ -103,22 +103,20 @@ async fn successful_run_recording() {
     assert_eq!(result.unwrap().value, 20); // (5 * 2) + 10 = 20
 
     // Verify delta_runs has status='completed'
-    let run_status: String = sqlx::query_scalar(
-        "SELECT status FROM delta_runs WHERE pipeline_name = 'test_success'",
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to fetch run status");
+    let run_status: String =
+        sqlx::query_scalar("SELECT status FROM delta_runs WHERE pipeline_name = 'test_success'")
+            .fetch_one(&pool)
+            .await
+            .expect("Failed to fetch run status");
 
     assert_eq!(run_status, "completed");
 
     // Verify entity_id is recorded
-    let entity_id: String = sqlx::query_scalar(
-        "SELECT entity_id FROM delta_runs WHERE pipeline_name = 'test_success'",
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to fetch entity_id");
+    let entity_id: String =
+        sqlx::query_scalar("SELECT entity_id FROM delta_runs WHERE pipeline_name = 'test_success'")
+            .fetch_one(&pool)
+            .await
+            .expect("Failed to fetch entity_id");
 
     assert_eq!(entity_id, "entity-123");
 
@@ -177,12 +175,11 @@ async fn failed_run_recording() {
     assert!(result.is_err());
 
     // Verify delta_runs has status='failed'
-    let run_status: String = sqlx::query_scalar(
-        "SELECT status FROM delta_runs WHERE pipeline_name = 'test_failure'",
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to fetch run status");
+    let run_status: String =
+        sqlx::query_scalar("SELECT status FROM delta_runs WHERE pipeline_name = 'test_failure'")
+            .fetch_one(&pool)
+            .await
+            .expect("Failed to fetch run status");
 
     assert_eq!(run_status, "failed");
 

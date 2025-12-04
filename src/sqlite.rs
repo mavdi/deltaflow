@@ -71,7 +71,12 @@ impl Recorder for SqliteRecorder {
         Ok(RunId(id))
     }
 
-    async fn start_step(&self, run_id: RunId, step_name: &str, step_index: u32) -> anyhow::Result<StepId> {
+    async fn start_step(
+        &self,
+        run_id: RunId,
+        step_name: &str,
+        step_index: u32,
+    ) -> anyhow::Result<StepId> {
         let id: i64 = sqlx::query_scalar(
             "INSERT INTO delta_steps (run_id, step_name, step_index) VALUES (?, ?, ?) RETURNING id",
         )

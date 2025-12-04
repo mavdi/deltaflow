@@ -81,7 +81,10 @@ impl Step for FlakyStep {
     async fn execute(&self, input: Self::Input) -> Result<Self::Output, StepError> {
         let count = self.fail_count.fetch_add(1, Ordering::SeqCst);
         if count < self.max_failures {
-            Err(StepError::retryable(anyhow::anyhow!("transient failure {}", count + 1)))
+            Err(StepError::retryable(anyhow::anyhow!(
+                "transient failure {}",
+                count + 1
+            )))
         } else {
             Ok(input)
         }

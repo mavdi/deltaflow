@@ -82,7 +82,8 @@ impl Step for ParseStep {
                 // Parsing errors are permanent - retrying won't help
                 Err(StepError::permanent(anyhow::anyhow!(
                     "Failed to parse '{}': {}",
-                    input.value, e
+                    input.value,
+                    e
                 )))
             }
         }
@@ -104,7 +105,12 @@ impl Step for DoubleStep {
     }
 
     async fn execute(&self, mut input: Self::Input) -> Result<Self::Output, StepError> {
-        println!("[{}] Doubling {} -> {}", self.name(), input.value, input.value * 2);
+        println!(
+            "[{}] Doubling {} -> {}",
+            self.name(),
+            input.value,
+            input.value * 2
+        );
         input.value *= 2;
         Ok(input)
     }
@@ -194,10 +200,7 @@ async fn main() -> anyhow::Result<()> {
         .start_with(ParseStep)
         .then(DoubleStep)
         .then(FormatStep)
-        .with_retry(RetryPolicy::fixed(
-            5,
-            std::time::Duration::from_millis(100),
-        ))
+        .with_retry(RetryPolicy::fixed(5, std::time::Duration::from_millis(100)))
         .with_recorder(NoopRecorder)
         .build();
 

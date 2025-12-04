@@ -3,9 +3,10 @@
 use std::time::Duration;
 
 /// Policy for retrying failed steps.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum RetryPolicy {
     /// No retries - fail immediately.
+    #[default]
     None,
 
     /// Fixed delay between retries.
@@ -27,12 +28,6 @@ pub enum RetryPolicy {
     },
 }
 
-impl Default for RetryPolicy {
-    fn default() -> Self {
-        Self::None
-    }
-}
-
 impl RetryPolicy {
     /// Create an exponential backoff policy with sensible defaults.
     ///
@@ -48,7 +43,10 @@ impl RetryPolicy {
 
     /// Create a fixed delay policy.
     pub fn fixed(max_attempts: u32, delay: Duration) -> Self {
-        Self::Fixed { max_attempts, delay }
+        Self::Fixed {
+            max_attempts,
+            delay,
+        }
     }
 
     /// Calculate the delay for a given attempt number (1-indexed).
@@ -57,7 +55,10 @@ impl RetryPolicy {
     pub fn delay_for_attempt(&self, attempt: u32) -> Option<Duration> {
         match self {
             Self::None => None,
-            Self::Fixed { max_attempts, delay } => {
+            Self::Fixed {
+                max_attempts,
+                delay,
+            } => {
                 if attempt <= *max_attempts {
                     Some(*delay)
                 } else {

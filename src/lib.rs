@@ -1,14 +1,14 @@
 //! Delta - A lightweight, type-safe pipeline engine for Rust.
 
-pub mod step;
-pub mod retry;
-pub mod recorder;
 pub mod pipeline;
+pub mod recorder;
+pub mod retry;
+pub mod step;
 
-pub use step::{Step, StepError};
+pub use pipeline::{BuiltPipeline, HasEntityId, Pipeline, PipelineError};
+pub use recorder::{NoopRecorder, Recorder, RunId, RunStatus, StepId, StepStatus};
 pub use retry::RetryPolicy;
-pub use recorder::{Recorder, NoopRecorder, RunId, StepId, RunStatus, StepStatus};
-pub use pipeline::{Pipeline, PipelineError, HasEntityId, BuiltPipeline};
+pub use step::{Step, StepError};
 
 #[cfg(feature = "sqlite")]
 pub mod sqlite;
