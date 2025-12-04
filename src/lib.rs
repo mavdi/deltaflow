@@ -14,4 +14,10 @@ pub use step::{Step, StepError};
 pub mod sqlite;
 
 #[cfg(feature = "sqlite")]
+pub mod runner;
+
+#[cfg(feature = "sqlite")]
 pub use sqlite::SqliteRecorder;
+
+#[cfg(feature = "sqlite")]
+pub use runner::{StoredTask, TaskError, TaskId, TaskStore};
