@@ -12,10 +12,13 @@ use crate::recorder::{NoopRecorder, Recorder, RunId, RunStatus, StepStatus};
 use crate::retry::RetryPolicy;
 use crate::step::{Step, StepError};
 
+/// Type alias for spawn generator functions.
+type SpawnGenerator<O> = Arc<dyn Fn(&O) -> Vec<serde_json::Value> + Send + Sync>;
+
 /// A declaration of work to spawn after pipeline completion.
 pub struct SpawnDeclaration<O> {
     pub(crate) target: &'static str,
-    pub(crate) generator: Arc<dyn Fn(&O) -> Vec<serde_json::Value> + Send + Sync>,
+    pub(crate) generator: SpawnGenerator<O>,
 }
 
 impl<O> Clone for SpawnDeclaration<O> {
