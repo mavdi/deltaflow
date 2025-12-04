@@ -1,5 +1,8 @@
 //! Pipeline builder and executor.
 
+#![allow(private_bounds)]
+#![allow(private_interfaces)]
+
 use std::sync::Arc;
 use async_trait::async_trait;
 use thiserror::Error;
@@ -55,13 +58,13 @@ impl HasEntityId for &str {
 
 /// Internal trait for boxed step execution.
 #[async_trait]
-trait BoxedStep<I, O>: Send + Sync {
+pub trait BoxedStep<I, O>: Send + Sync {
     fn name(&self) -> &'static str;
     async fn execute(&self, input: I) -> Result<O, StepError>;
 }
 
 /// Wrapper to make any Step into a BoxedStep.
-struct StepWrapper<S>(S);
+pub struct StepWrapper<S>(pub S);
 
 #[async_trait]
 impl<S> BoxedStep<S::Input, S::Output> for StepWrapper<S>
@@ -79,7 +82,7 @@ where
 
 /// A chain of steps that transforms I -> O.
 #[async_trait]
-trait StepChain<I, O>: Send + Sync {
+pub trait StepChain<I, O>: Send + Sync {
     async fn run(
         &self,
         input: I,
@@ -91,7 +94,7 @@ trait StepChain<I, O>: Send + Sync {
 }
 
 /// Terminal chain - identity transform.
-struct Identity;
+pub struct Identity;
 
 #[async_trait]
 impl<T: Send + 'static> StepChain<T, T> for Identity {
@@ -108,14 +111,14 @@ impl<T: Send + 'static> StepChain<T, T> for Identity {
 }
 
 /// Chain that runs a step then continues with the rest.
-struct ChainedStep<S, Next, I, M, O>
+pub struct ChainedStep<S, Next, I, M, O>
 where
     S: BoxedStep<I, M>,
     Next: StepChain<M, O>,
 {
-    step: S,
-    next: Next,
-    _phantom: std::marker::PhantomData<(I, M, O)>,
+    pub step: S,
+    pub next: Next,
+    pub _phantom: std::marker::PhantomData<(I, M, O)>,
 }
 
 #[async_trait]
@@ -283,14 +286,14 @@ where
 }
 
 /// Chain that runs first chain then a step.
-struct ThenChain<First, S, I, M, O>
+pub struct ThenChain<First, S, I, M, O>
 where
     First: StepChain<I, M>,
     S: BoxedStep<M, O>,
 {
-    first: First,
-    step: S,
-    _phantom: std::marker::PhantomData<(I, M, O)>,
+    pub first: First,
+    pub step: S,
+    pub _phantom: std::marker::PhantomData<(I, M, O)>,
 }
 
 #[async_trait]
