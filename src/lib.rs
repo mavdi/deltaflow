@@ -20,4 +20,4 @@ pub mod runner;
 pub use sqlite::SqliteRecorder;
 
 #[cfg(feature = "sqlite")]
-pub use runner::{StoredTask, TaskError, TaskId, TaskStore};
+pub use runner::{SqliteTaskStore, StoredTask, TaskError, TaskId, TaskStore};
