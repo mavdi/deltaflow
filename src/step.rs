@@ -36,10 +36,10 @@ impl StepError {
 #[async_trait]
 pub trait Step: Send + Sync {
     /// The input type this step accepts.
-    type Input: Send + Clone;
+    type Input: Send + Sync + Clone;
 
     /// The output type this step produces.
-    type Output: Send;
+    type Output: Send + Sync;
 
     /// The name of this step for logging and recording.
     fn name(&self) -> &'static str;
