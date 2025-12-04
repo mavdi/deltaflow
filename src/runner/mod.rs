@@ -1,7 +1,9 @@
 //! Task runner module.
 
-pub mod store;
+pub mod erased;
 pub mod sqlite_store;
+pub mod store;
 
-pub use store::{StoredTask, TaskError, TaskId, TaskStore};
+pub use erased::{ErasedPipeline, SpawnedTask};
 pub use sqlite_store::SqliteTaskStore;
+pub use store::{StoredTask, TaskError, TaskId, TaskStore};
