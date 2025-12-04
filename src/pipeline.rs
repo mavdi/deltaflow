@@ -4,12 +4,28 @@
 #![allow(private_interfaces)]
 
 use async_trait::async_trait;
+use serde::Serialize;
 use std::sync::Arc;
 use thiserror::Error;
 
 use crate::recorder::{NoopRecorder, Recorder, RunId, RunStatus, StepStatus};
 use crate::retry::RetryPolicy;
 use crate::step::{Step, StepError};
+
+/// A declaration of work to spawn after pipeline completion.
+pub struct SpawnDeclaration<O> {
+    pub(crate) target: &'static str,
+    pub(crate) generator: Arc<dyn Fn(&O) -> Vec<serde_json::Value> + Send + Sync>,
+}
+
+impl<O> Clone for SpawnDeclaration<O> {
+    fn clone(&self) -> Self {
+        Self {
+            target: self.target,
+            generator: self.generator.clone(),
+        }
+    }
+}
 
 /// Error returned by pipeline execution.
 #[derive(Error, Debug)]
@@ -205,6 +221,7 @@ where
     chain: Chain,
     retry_policy: RetryPolicy,
     recorder: Arc<dyn Recorder>,
+    spawn_declarations: Vec<SpawnDeclaration<O>>,
     _phantom: std::marker::PhantomData<(I, O)>,
 }
 
@@ -216,6 +233,7 @@ impl Pipeline<(), (), Identity> {
             chain: Identity,
             retry_policy: RetryPolicy::default(),
             recorder: Arc::new(NoopRecorder),
+            spawn_declarations: Vec::new(),
             _phantom: std::marker::PhantomData,
         }
     }
@@ -248,6 +266,7 @@ where
             },
             retry_policy: self.retry_policy,
             recorder: self.recorder,
+            spawn_declarations: Vec::new(),
             _phantom: std::marker::PhantomData,
         }
     }
@@ -273,6 +292,7 @@ where
             },
             retry_policy: self.retry_policy,
             recorder: self.recorder,
+            spawn_declarations: Vec::new(),
             _phantom: std::marker::PhantomData,
         }
     }
@@ -289,6 +309,24 @@ where
         self
     }
 
+    /// Declare follow-up tasks to spawn on successful completion.
+    pub fn spawns<T, F>(mut self, target: &'static str, f: F) -> Self
+    where
+        T: Serialize + 'static,
+        F: Fn(&O) -> Vec<T> + Send + Sync + 'static,
+    {
+        self.spawn_declarations.push(SpawnDeclaration {
+            target,
+            generator: Arc::new(move |output| {
+                f(output)
+                    .into_iter()
+                    .filter_map(|item| serde_json::to_value(item).ok())
+                    .collect()
+            }),
+        });
+        self
+    }
+
     /// Build the pipeline, ready for execution.
     pub fn build(self) -> BuiltPipeline<I, O, Chain> {
         BuiltPipeline {
@@ -296,6 +334,7 @@ where
             chain: self.chain,
             retry_policy: self.retry_policy,
             recorder: self.recorder,
+            spawn_declarations: self.spawn_declarations,
             _phantom: std::marker::PhantomData,
         }
     }
@@ -407,6 +446,7 @@ where
     chain: Chain,
     retry_policy: RetryPolicy,
     recorder: Arc<dyn Recorder>,
+    pub(crate) spawn_declarations: Vec<SpawnDeclaration<O>>,
     _phantom: std::marker::PhantomData<(I, O)>,
 }
 
@@ -449,5 +489,17 @@ where
     /// Get the pipeline name.
     pub fn name(&self) -> &'static str {
         self.name
+    }
+
+    /// Get spawned tasks for the given output.
+    pub fn get_spawned(&self, output: &O) -> Vec<(&'static str, serde_json::Value)> {
+        self.spawn_declarations
+            .iter()
+            .flat_map(|decl| {
+                (decl.generator)(output)
+                    .into_iter()
+                    .map(|input| (decl.target, input))
+            })
+            .collect()
     }
 }
