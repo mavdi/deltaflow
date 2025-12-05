@@ -1,10 +1,14 @@
 [package]
-name = "delta"
+name = "deltaflow"
 version = "0.1.0"
 edition = "2021"
-description = "A lightweight, type-safe pipeline engine for Rust"
+description = "The embeddable workflow engine. Type-safe, Elixir-inspired pipelines."
 license = "MIT"
-repository = "https://github.com/mavdi/delta"
+repository = "https://github.com/mavdi/deltaflow"
+documentation = "https://docs.rs/deltaflow"
+readme = "README.md"
+keywords = ["workflow", "pipeline", "async", "jobs", "tasks"]
+categories = ["asynchronous", "concurrency"]
 
 [features]
 default = []

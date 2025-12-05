@@ -1,4 +1,37 @@
-//! Delta - A lightweight, type-safe pipeline engine for Rust.
+//! # Deltaflow
+//!
+//! The embeddable workflow engine.
+//!
+//! Deltaflow brings Elixir-style pipeline composition to Rust with compile-time
+//! type safety. Build observable workflows where each step transforms typed
+//! inputs to outputs - no infrastructure required.
+//!
+//! ## Why Deltaflow?
+//!
+//! - **Type-safe composition** - Compiler enforces step output matches next step's input
+//! - **Elixir-inspired** - Declarative pipelines via method chaining, not scattered callbacks
+//! - **Observable by default** - Every run and step recorded for debugging
+//! - **Embeddable** - A library, not a service. Runs in your process.
+//!
+//! ## Quick Start
+//!
+//! ```rust,ignore
+//! use deltaflow::{Pipeline, Step, StepError, RetryPolicy, NoopRecorder};
+//!
+//! let pipeline = Pipeline::new("my_workflow")
+//!     .start_with(ParseInput)       // String -> ParsedData
+//!     .then(ProcessData)            // ParsedData -> ProcessedData
+//!     .then(FormatOutput)           // ProcessedData -> Output
+//!     .with_retry(RetryPolicy::exponential(3))
+//!     .with_recorder(NoopRecorder)
+//!     .build();
+//!
+//! let result = pipeline.run(input).await?;
+//! ```
+//!
+//! ## Feature Flags
+//!
+//! - `sqlite` - Enable SQLite-backed recording and task storage
 
 pub mod pipeline;
 pub mod recorder;
