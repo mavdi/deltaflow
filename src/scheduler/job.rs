@@ -35,7 +35,7 @@ impl<S: TaskStore + 'static> PeriodicScheduler<S> {
 
     /// Run all jobs indefinitely.
     pub async fn run(&self) -> ! {
-        let _handles: Vec<_> = self
+        let handles: Vec<_> = self
             .jobs
             .iter()
             .enumerate()
@@ -58,6 +58,9 @@ impl<S: TaskStore + 'static> PeriodicScheduler<S> {
                 })
             })
             .collect();
+
+        // Keep handles in scope to maintain task references
+        let _ = handles;
 
         // Wait forever (jobs run indefinitely)
         futures::future::pending::<()>().await;
@@ -84,6 +87,7 @@ impl<S: TaskStore + 'static> PeriodicScheduler<S> {
         }
 
         let mut ticker = interval(interval_duration);
+        ticker.tick().await; // Consume immediate first tick
 
         loop {
             ticker.tick().await;
