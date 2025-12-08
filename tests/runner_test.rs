@@ -1,7 +1,7 @@
 //! Integration tests for the task runner.
 
 use async_trait::async_trait;
-use delta::{
+use deltaflow::{
     HasEntityId, NoopRecorder, Pipeline, RunnerBuilder,
     SqliteTaskStore, Step, StepError,
 };

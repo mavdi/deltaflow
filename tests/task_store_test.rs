@@ -1,6 +1,6 @@
 //! Tests for SqliteTaskStore.
 
-use delta::{SqliteTaskStore, TaskStore};
+use deltaflow::{SqliteTaskStore, TaskStore};
 use sqlx::SqlitePool;
 
 async fn setup_store() -> SqliteTaskStore {

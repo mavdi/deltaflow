@@ -99,6 +99,55 @@ runner.submit("process_order", order).await?;
 runner.run().await;
 ```
 
+## Periodic Scheduler
+
+For time-based task enqueueing, use `PeriodicScheduler`:
+
+```rust
+use deltaflow::{SchedulerBuilder, SqliteTaskStore};
+use std::time::Duration;
+
+let scheduler = SchedulerBuilder::new(task_store)
+    .job("process_video", Duration::from_secs(900), {
+        let repo = repo.clone();
+        move || {
+            let repo = repo.clone();
+            async move { repo.get_pending_videos().await.unwrap_or_default() }
+        }
+    })
+    .run_on_start(true)
+
+    .job("validate_signals", Duration::from_secs(3600), {
+        let repo = repo.clone();
+        move || {
+            let repo = repo.clone();
+            async move { repo.get_pending_signals().await.unwrap_or_default() }
+        }
+    })
+    .run_on_start(false)
+
+    .build();
+
+// Run alongside your pipeline runner
+tokio::select! {
+    _ = runner.run() => {}
+    _ = scheduler.run() => {}
+}
+```
+
+## Per-Pipeline Concurrency
+
+For pipelines that need rate limiting (e.g., external API calls):
+
+```rust
+let runner = RunnerBuilder::new(task_store)
+    .pipeline(fast_pipeline)
+    .pipeline_with_concurrency(rate_limited_pipeline, 1)  // Only 1 concurrent
+    .build();
+```
+
+Pipelines with custom concurrency use their own semaphore instead of the global `max_concurrent` limit.
+
 ## Status
 
 Deltaflow is **experimental** (0.1.x). The API will evolve based on feedback.

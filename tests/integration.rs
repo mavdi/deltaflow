@@ -1,7 +1,7 @@
 //! Integration tests for delta pipeline.
 
 use async_trait::async_trait;
-use delta::{HasEntityId, NoopRecorder, Pipeline, RetryPolicy, Step, StepError};
+use deltaflow::{HasEntityId, NoopRecorder, Pipeline, RetryPolicy, Step, StepError};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 

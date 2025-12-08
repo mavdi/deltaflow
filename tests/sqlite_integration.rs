@@ -3,7 +3,7 @@
 #![cfg(feature = "sqlite")]
 
 use async_trait::async_trait;
-use delta::{HasEntityId, Pipeline, RetryPolicy, SqliteRecorder, Step, StepError};
+use deltaflow::{HasEntityId, Pipeline, RetryPolicy, SqliteRecorder, Step, StepError};
 use sqlx::sqlite::SqlitePoolOptions;
 
 // Test input type

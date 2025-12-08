@@ -8,7 +8,7 @@
 //! - Running the pipeline and handling results
 
 use async_trait::async_trait;
-use delta::{HasEntityId, NoopRecorder, Pipeline, RetryPolicy, Step, StepError};
+use deltaflow::{HasEntityId, NoopRecorder, Pipeline, RetryPolicy, Step, StepError};
 
 /// Input type that wraps a string and provides an entity ID.
 ///
