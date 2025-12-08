@@ -50,6 +50,9 @@ pub mod sqlite;
 pub mod runner;
 
 #[cfg(feature = "sqlite")]
+pub mod scheduler;
+
+#[cfg(feature = "sqlite")]
 pub use sqlite::SqliteRecorder;
 
 #[cfg(feature = "sqlite")]
@@ -57,3 +60,6 @@ pub use runner::{
     ErasedPipeline, Runner, RunnerBuilder, SqliteTaskStore, SpawnedTask, StoredTask, TaskError,
     TaskId, TaskStore,
 };
+
+#[cfg(feature = "sqlite")]
+pub use scheduler::{PeriodicScheduler, SchedulerBuilder};
