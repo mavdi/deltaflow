@@ -38,17 +38,22 @@ impl<S: TaskStore + 'static> Runner<S> {
             if available > 0 {
                 if let Ok(tasks) = self.store.claim(available).await {
                     for task in tasks {
-                        let permit = semaphore.clone().acquire_owned().await.unwrap();
                         let store = self.store.clone();
                         let pipelines = self.pipelines.clone();
                         let pipeline_sem = self.pipeline_semaphores.get(task.pipeline.as_str()).cloned();
 
+                        // Acquire either pipeline-specific OR global semaphore, not both
+                        // This prevents deadlocks when both semaphores are present
+                        let global_sem = semaphore.clone();
+
                         tokio::spawn(async move {
-                            // If pipeline has custom semaphore, acquire it
-                            let _pipeline_permit = if let Some(ref sem) = pipeline_sem {
-                                Some(sem.acquire().await.unwrap())
+                            // Use pipeline semaphore if available, otherwise use global
+                            let _permit = if let Some(sem) = pipeline_sem {
+                                // Pipeline with custom concurrency - use ONLY pipeline semaphore
+                                sem.acquire_owned().await.unwrap()
                             } else {
-                                None
+                                // No custom concurrency - use global semaphore
+                                global_sem.acquire_owned().await.unwrap()
                             };
 
                             let result =
@@ -65,7 +70,6 @@ impl<S: TaskStore + 'static> Runner<S> {
                                     let _ = store.fail(task.id, &e.to_string()).await;
                                 }
                             }
-                            drop(permit);
                         });
                     }
                 }
@@ -118,13 +122,19 @@ impl<S: TaskStore + 'static> RunnerBuilder<S> {
 
     /// Register a pipeline with custom concurrency limit.
     ///
-    /// This pipeline will have its own semaphore limiting concurrent executions,
-    /// independent of the global `max_concurrent` setting.
+    /// This pipeline will use its own semaphore limiting concurrent executions,
+    /// independent of and INSTEAD OF the global `max_concurrent` setting.
+    /// The pipeline will only be limited by its own concurrency setting.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `max_concurrent` is 0.
     pub fn pipeline_with_concurrency(
         mut self,
         pipeline: impl ErasedPipeline + 'static,
         max_concurrent: usize,
     ) -> Self {
+        assert!(max_concurrent > 0, "pipeline concurrency must be at least 1");
         let name = pipeline.name();
         self.pipeline_concurrency.insert(name, max_concurrent);
         self.pipelines.insert(name, Arc::new(pipeline));
