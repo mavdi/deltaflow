@@ -40,14 +40,14 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-deltaflow = "0.1"
+deltaflow = "0.2"
 ```
 
 For SQLite-backed recording and task queue:
 
 ```toml
 [dependencies]
-deltaflow = { version = "0.1", features = ["sqlite"] }
+deltaflow = { version = "0.2", features = ["sqlite"] }
 ```
 
 ## Core Concepts

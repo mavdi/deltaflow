@@ -1,8 +1,8 @@
-# Delta Pipeline Engine - Design Document
+# Deltaflow - Design Document
 
 A lightweight, type-safe pipeline engine for Rust.
 
-**Repository:** `github.com/mavdi/delta`
+**Repository:** `github.com/mavdi/deltaflow`
 
 ## Overview & Goals
 
@@ -264,8 +264,8 @@ delta/
 
 ```toml
 [package]
-name = "delta"
-version = "0.1.0"
+name = "deltaflow"
+version = "0.2.0"
 edition = "2021"
 description = "A lightweight, type-safe pipeline engine for Rust"
 license = "MIT"
