@@ -110,6 +110,9 @@ pub trait StepChain<I, O>: Send + Sync {
         retry_policy: &RetryPolicy,
         start_index: u32,
     ) -> Result<O, PipelineError>;
+
+    /// Returns the number of steps in this chain.
+    fn step_count(&self) -> u32;
 }
 
 /// Terminal chain - identity transform.
@@ -126,6 +129,10 @@ impl<T: Send + 'static> StepChain<T, T> for Identity {
         _start_index: u32,
     ) -> Result<T, PipelineError> {
         Ok(input)
+    }
+
+    fn step_count(&self) -> u32 {
+        0
     }
 }
 
@@ -212,6 +219,10 @@ where
         self.next
             .run(output, run_id, recorder, retry_policy, start_index + 1)
             .await
+    }
+
+    fn step_count(&self) -> u32 {
+        1 + self.next.step_count()
     }
 }
 
@@ -377,8 +388,7 @@ where
             .run(input, run_id, recorder, retry_policy, start_index)
             .await?;
 
-        // Count steps in first chain (hacky but works for now)
-        let next_index = start_index + count_chain_steps(&self.first);
+        let next_index = start_index + self.first.step_count();
 
         let step_name = self.step.name();
         let step_id = recorder.start_step(run_id, step_name, next_index).await?;
@@ -432,12 +442,10 @@ where
             .await?;
         Ok(output)
     }
-}
 
-/// Helper to count steps (simplified - always returns 1 for non-identity).
-fn count_chain_steps<I, O, C: StepChain<I, O> + ?Sized>(_chain: &C) -> u32 {
-    // This is a simplification - in practice we'd need a trait method
-    1
+    fn step_count(&self) -> u32 {
+        self.first.step_count() + 1
+    }
 }
 
 /// A built pipeline ready for execution.
