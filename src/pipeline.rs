@@ -1,8 +1,5 @@
 //! Pipeline builder and executor.
 
-#![allow(private_bounds)]
-#![allow(private_interfaces)]
-
 use async_trait::async_trait;
 use serde::Serialize;
 use std::sync::Arc;
@@ -76,6 +73,7 @@ impl HasEntityId for &str {
 }
 
 /// Internal trait for boxed step execution.
+#[doc(hidden)]
 #[async_trait]
 pub trait BoxedStep<I, O>: Send + Sync {
     fn name(&self) -> &'static str;
@@ -83,6 +81,7 @@ pub trait BoxedStep<I, O>: Send + Sync {
 }
 
 /// Wrapper to make any Step into a BoxedStep.
+#[doc(hidden)]
 pub struct StepWrapper<S>(pub S);
 
 #[async_trait]
@@ -100,6 +99,7 @@ where
 }
 
 /// A chain of steps that transforms I -> O.
+#[doc(hidden)]
 #[async_trait]
 pub trait StepChain<I, O>: Send + Sync {
     async fn run(
@@ -116,6 +116,7 @@ pub trait StepChain<I, O>: Send + Sync {
 }
 
 /// Terminal chain - identity transform.
+#[doc(hidden)]
 pub struct Identity;
 
 #[async_trait]
@@ -137,6 +138,7 @@ impl<T: Send + 'static> StepChain<T, T> for Identity {
 }
 
 /// Chain that runs a step then continues with the rest.
+#[doc(hidden)]
 pub struct ChainedStep<S, Next, I, M, O>
 where
     S: BoxedStep<I, M>,
@@ -355,6 +357,7 @@ where
 }
 
 /// Chain that runs first chain then a step.
+#[doc(hidden)]
 pub struct ThenChain<First, S, I, M, O>
 where
     First: StepChain<I, M>,

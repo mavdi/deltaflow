@@ -38,8 +38,7 @@ impl<S: TaskStore + 'static> PeriodicScheduler<S> {
         let handles: Vec<_> = self
             .jobs
             .iter()
-            .enumerate()
-            .map(|(_idx, job)| {
+            .map(|job| {
                 let task_store = self.task_store.clone();
                 let pipeline_name = job.pipeline_name;
                 let interval_duration = job.interval;
