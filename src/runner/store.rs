@@ -52,6 +52,13 @@ pub trait TaskStore: Send + Sync {
         Ok(tasks.into_iter().filter(|t| t.pipeline == pipeline).collect())
     }
 
+    /// Reset tasks stuck in "running" state back to "pending".
+    /// Call on startup to recover from crashes.
+    /// Returns the number of tasks recovered.
+    async fn recover_orphans(&self) -> Result<usize, TaskError> {
+        Ok(0) // Default: no-op for stores that don't support recovery
+    }
+
     /// Mark a task as completed.
     async fn complete(&self, id: TaskId) -> Result<(), TaskError>;
 

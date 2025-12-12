@@ -252,6 +252,21 @@ impl TaskStore for SqliteTaskStore {
         Ok(tasks)
     }
 
+    async fn recover_orphans(&self) -> Result<usize, TaskError> {
+        let result = sqlx::query(
+            r#"
+            UPDATE delta_tasks
+            SET status = 'pending', started_at = NULL
+            WHERE status = 'running'
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| TaskError::StorageError(e.to_string()))?;
+
+        Ok(result.rows_affected() as usize)
+    }
+
     async fn complete(&self, id: TaskId) -> Result<(), TaskError> {
         sqlx::query(
             r#"
