@@ -101,3 +101,53 @@ async fn test_claim_fifo_order() {
     let tasks2 = store.claim(1).await.unwrap();
     assert_eq!(tasks2[0].id, id3);
 }
+
+#[tokio::test]
+async fn test_claim_for_pipeline() {
+    let store = setup_store().await;
+
+    // Enqueue tasks for different pipelines
+    store.enqueue("pipeline_a", serde_json::json!({"n": 1})).await.unwrap();
+    store.enqueue("pipeline_b", serde_json::json!({"n": 2})).await.unwrap();
+    store.enqueue("pipeline_a", serde_json::json!({"n": 3})).await.unwrap();
+    store.enqueue("pipeline_b", serde_json::json!({"n": 4})).await.unwrap();
+
+    // Claim only pipeline_a tasks
+    let tasks = store.claim_for_pipeline("pipeline_a", 10).await.unwrap();
+    assert_eq!(tasks.len(), 2);
+    assert!(tasks.iter().all(|t| t.pipeline == "pipeline_a"));
+
+    // pipeline_b tasks should still be pending
+    let remaining = store.claim_for_pipeline("pipeline_b", 10).await.unwrap();
+    assert_eq!(remaining.len(), 2);
+    assert!(remaining.iter().all(|t| t.pipeline == "pipeline_b"));
+}
+
+#[tokio::test]
+async fn test_recover_orphans() {
+    let pool = SqlitePool::connect(":memory:").await.unwrap();
+    let store = SqliteTaskStore::new(pool.clone());
+    store.run_migrations().await.unwrap();
+
+    // Simulate crashed runner by directly inserting "running" tasks
+    sqlx::query(
+        r#"
+        INSERT INTO delta_tasks (pipeline, input, status, started_at)
+        VALUES
+            ('pipeline_a', '{"n": 1}', 'running', datetime('now', '-10 minutes')),
+            ('pipeline_a', '{"n": 2}', 'running', datetime('now', '-5 minutes')),
+            ('pipeline_b', '{"n": 3}', 'pending', datetime('now'))
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // Recover orphans
+    let recovered = store.recover_orphans().await.unwrap();
+    assert_eq!(recovered, 2, "Should recover 2 orphaned tasks");
+
+    // All 3 tasks should now be claimable
+    let tasks = store.claim(10).await.unwrap();
+    assert_eq!(tasks.len(), 3, "Should claim all 3 tasks after recovery");
+}

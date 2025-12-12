@@ -31,48 +31,69 @@ impl<S: TaskStore + 'static> Runner<S> {
 
     /// Run the task loop indefinitely.
     pub async fn run(&self) -> ! {
-        let semaphore = Arc::new(Semaphore::new(self.max_concurrent));
+        // Recover any orphaned tasks from previous crashes
+        let _ = self.store.recover_orphans().await;
+
+        let global_semaphore = Arc::new(Semaphore::new(self.max_concurrent));
 
         loop {
-            let available = semaphore.available_permits();
-            if available > 0 {
-                if let Ok(tasks) = self.store.claim(available).await {
-                    for task in tasks {
-                        let store = self.store.clone();
-                        let pipelines = self.pipelines.clone();
-                        let pipeline_sem = self.pipeline_semaphores.get(task.pipeline.as_str()).cloned();
+            let mut tasks_to_spawn = Vec::new();
 
-                        // Acquire either pipeline-specific OR global semaphore, not both
-                        // This prevents deadlocks when both semaphores are present
-                        let global_sem = semaphore.clone();
-
-                        tokio::spawn(async move {
-                            // Use pipeline semaphore if available, otherwise use global
-                            let _permit = if let Some(sem) = pipeline_sem {
-                                // Pipeline with custom concurrency - use ONLY pipeline semaphore
-                                sem.acquire_owned().await.unwrap()
-                            } else {
-                                // No custom concurrency - use global semaphore
-                                global_sem.acquire_owned().await.unwrap()
-                            };
-
-                            let result =
-                                Self::execute_task(&pipelines, store.as_ref(), &task).await;
-                            match result {
-                                Ok(spawned) => {
-                                    // Enqueue follow-up tasks
-                                    for sp in spawned {
-                                        let _ = store.enqueue(sp.pipeline, sp.input).await;
-                                    }
-                                    let _ = store.complete(task.id).await;
-                                }
-                                Err(e) => {
-                                    let _ = store.fail(task.id, &e.to_string()).await;
-                                }
-                            }
-                        });
+            // Phase 1: Handle pipelines with custom concurrency limits
+            // Acquire permit FIRST, then claim task
+            for (pipeline_name, pipeline_sem) in &self.pipeline_semaphores {
+                // Try to acquire a permit (non-blocking)
+                if let Ok(permit) = pipeline_sem.clone().try_acquire_owned() {
+                    // We have a permit - now claim a task for this pipeline
+                    if let Ok(mut tasks) = self.store.claim_for_pipeline(pipeline_name, 1).await {
+                        if let Some(task) = tasks.pop() {
+                            tasks_to_spawn.push((task, Some(permit), None));
+                        }
+                        // If no task available, permit drops and is released
                     }
                 }
+            }
+
+            // Phase 2: Handle pipelines without custom limits (use global semaphore)
+            let global_available = global_semaphore.available_permits();
+            if global_available > 0 {
+                // Build list of pipelines to exclude (those with custom concurrency)
+                let excluded: Vec<&str> = self.pipeline_semaphores.keys().copied().collect();
+
+                // Claim tasks, excluding pipelines with custom concurrency
+                if let Ok(tasks) = self.store.claim_excluding(global_available, &excluded).await {
+                    for task in tasks {
+                        // Acquire global permit for each task
+                        if let Ok(permit) = global_semaphore.clone().try_acquire_owned() {
+                            tasks_to_spawn.push((task, None, Some(permit)));
+                        }
+                    }
+                }
+            }
+
+            // Phase 3: Spawn all tasks that have permits
+            for (task, pipeline_permit, global_permit) in tasks_to_spawn {
+                let store = self.store.clone();
+                let pipelines = self.pipelines.clone();
+
+                tokio::spawn(async move {
+                    // Hold the permit for the duration of execution
+                    let _pipeline_permit = pipeline_permit;
+                    let _global_permit = global_permit;
+
+                    let result = Self::execute_task(&pipelines, store.as_ref(), &task).await;
+                    match result {
+                        Ok(spawned) => {
+                            for sp in spawned {
+                                let _ = store.enqueue(sp.pipeline, sp.input).await;
+                            }
+                            let _ = store.complete(task.id).await;
+                        }
+                        Err(e) => {
+                            let _ = store.fail(task.id, &e.to_string()).await;
+                        }
+                    }
+                });
             }
 
             tokio::time::sleep(self.poll_interval).await;
