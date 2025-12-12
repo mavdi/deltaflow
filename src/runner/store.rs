@@ -59,6 +59,17 @@ pub trait TaskStore: Send + Sync {
         Ok(0) // Default: no-op for stores that don't support recovery
     }
 
+    /// Claim up to `limit` pending tasks, excluding specified pipelines.
+    /// Used to claim tasks for the global pool while custom-concurrency pipelines
+    /// are handled separately.
+    async fn claim_excluding(&self, limit: usize, exclude_pipelines: &[&str]) -> Result<Vec<StoredTask>, TaskError> {
+        // Default: just use claim (for backwards compatibility)
+        let tasks = self.claim(limit).await?;
+        Ok(tasks.into_iter()
+            .filter(|t| !exclude_pipelines.contains(&t.pipeline.as_str()))
+            .collect())
+    }
+
     /// Mark a task as completed.
     async fn complete(&self, id: TaskId) -> Result<(), TaskError>;
 

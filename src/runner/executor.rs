@@ -57,17 +57,13 @@ impl<S: TaskStore + 'static> Runner<S> {
             // Phase 2: Handle pipelines without custom limits (use global semaphore)
             let global_available = global_semaphore.available_permits();
             if global_available > 0 {
-                // Claim tasks, excluding pipelines with custom concurrency
-                if let Ok(tasks) = self.store.claim(global_available).await {
-                    for task in tasks {
-                        // Skip if this pipeline has custom concurrency (already handled above)
-                        if self.pipeline_semaphores.contains_key(task.pipeline.as_str()) {
-                            // This shouldn't happen with claim_for_pipeline, but be safe
-                            // Mark as pending again or just skip
-                            continue;
-                        }
+                // Build list of pipelines to exclude (those with custom concurrency)
+                let excluded: Vec<&str> = self.pipeline_semaphores.keys().copied().collect();
 
-                        // Try to acquire global permit
+                // Claim tasks, excluding pipelines with custom concurrency
+                if let Ok(tasks) = self.store.claim_excluding(global_available, &excluded).await {
+                    for task in tasks {
+                        // Acquire global permit for each task
                         if let Ok(permit) = global_semaphore.clone().try_acquire_owned() {
                             tasks_to_spawn.push((task, None, Some(permit)));
                         }

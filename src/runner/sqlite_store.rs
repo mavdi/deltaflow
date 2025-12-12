@@ -267,6 +267,104 @@ impl TaskStore for SqliteTaskStore {
         Ok(result.rows_affected() as usize)
     }
 
+    async fn claim_excluding(&self, limit: usize, exclude_pipelines: &[&str]) -> Result<Vec<StoredTask>, TaskError> {
+        if exclude_pipelines.is_empty() {
+            return self.claim(limit).await;
+        }
+
+        let mut tx = self.pool
+            .begin()
+            .await
+            .map_err(|e| TaskError::StorageError(e.to_string()))?;
+
+        // Build NOT IN clause for excluded pipelines
+        let exclude_placeholders: Vec<String> = exclude_pipelines.iter().map(|_| "?".to_string()).collect();
+        let exclude_clause = exclude_placeholders.join(",");
+
+        let select_query = format!(
+            r#"
+            SELECT id FROM delta_tasks
+            WHERE status = 'pending' AND pipeline NOT IN ({})
+            ORDER BY created_at
+            LIMIT ?
+            "#,
+            exclude_clause
+        );
+
+        let mut query = sqlx::query_scalar::<_, i64>(&select_query);
+        for pipeline in exclude_pipelines {
+            query = query.bind(*pipeline);
+        }
+        query = query.bind(limit as i64);
+
+        let ids: Vec<i64> = query
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(|e| TaskError::StorageError(e.to_string()))?;
+
+        if ids.is_empty() {
+            tx.commit()
+                .await
+                .map_err(|e| TaskError::StorageError(e.to_string()))?;
+            return Ok(vec![]);
+        }
+
+        // Build placeholders for IN clause
+        let placeholders: Vec<String> = ids.iter().map(|_| "?".to_string()).collect();
+        let in_clause = placeholders.join(",");
+
+        // Update status
+        let update_query = format!(
+            "UPDATE delta_tasks SET status = 'running', started_at = datetime('now') WHERE id IN ({})",
+            in_clause
+        );
+        let mut update = sqlx::query(&update_query);
+        for id in &ids {
+            update = update.bind(id);
+        }
+        update
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| TaskError::StorageError(e.to_string()))?;
+
+        // Fetch the updated tasks
+        let fetch_query = format!(
+            "SELECT id, pipeline, input, created_at FROM delta_tasks WHERE id IN ({})",
+            in_clause
+        );
+        let mut fetch = sqlx::query_as::<_, (i64, String, String, String)>(&fetch_query);
+        for id in &ids {
+            fetch = fetch.bind(id);
+        }
+        let rows = fetch
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(|e| TaskError::StorageError(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| TaskError::StorageError(e.to_string()))?;
+
+        let tasks = rows
+            .into_iter()
+            .map(|(id, pipeline, input, created_at)| {
+                let input_value: serde_json::Value = serde_json::from_str(&input)
+                    .map_err(|e| TaskError::DeserializationError(e.to_string()))?;
+                let created = DateTime::parse_from_rfc3339(&format!("{}Z", created_at.replace(' ', "T")))
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now());
+                Ok(StoredTask {
+                    id: TaskId(id),
+                    pipeline,
+                    input: input_value,
+                    created_at: created,
+                })
+            })
+            .collect::<Result<Vec<_>, TaskError>>()?;
+
+        Ok(tasks)
+    }
+
     async fn complete(&self, id: TaskId) -> Result<(), TaskError> {
         sqlx::query(
             r#"
