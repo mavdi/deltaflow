@@ -101,3 +101,24 @@ async fn test_claim_fifo_order() {
     let tasks2 = store.claim(1).await.unwrap();
     assert_eq!(tasks2[0].id, id3);
 }
+
+#[tokio::test]
+async fn test_claim_for_pipeline() {
+    let store = setup_store().await;
+
+    // Enqueue tasks for different pipelines
+    store.enqueue("pipeline_a", serde_json::json!({"n": 1})).await.unwrap();
+    store.enqueue("pipeline_b", serde_json::json!({"n": 2})).await.unwrap();
+    store.enqueue("pipeline_a", serde_json::json!({"n": 3})).await.unwrap();
+    store.enqueue("pipeline_b", serde_json::json!({"n": 4})).await.unwrap();
+
+    // Claim only pipeline_a tasks
+    let tasks = store.claim_for_pipeline("pipeline_a", 10).await.unwrap();
+    assert_eq!(tasks.len(), 2);
+    assert!(tasks.iter().all(|t| t.pipeline == "pipeline_a"));
+
+    // pipeline_b tasks should still be pending
+    let remaining = store.claim_for_pipeline("pipeline_b", 10).await.unwrap();
+    assert_eq!(remaining.len(), 2);
+    assert!(remaining.iter().all(|t| t.pipeline == "pipeline_b"));
+}
