@@ -242,3 +242,73 @@ async fn test_branch_isolation_downstream_failure() {
     // E should complete even though D failed
     assert!(recorded.contains(&"E:1".to_string()), "Pipeline E should complete despite D failing");
 }
+
+#[tokio::test]
+async fn test_predicate_panic_handled() {
+    // Demonstrates: if a fork predicate panics, it's treated as not matching
+    // This relies on std::panic::catch_unwind behavior in predicates
+    let pool = SqlitePool::connect(":memory:").await.unwrap();
+    let store = SqliteTaskStore::new(pool);
+    store.run_migrations().await.unwrap();
+
+    let recorded = Arc::new(Mutex::new(Vec::new()));
+
+    // Pipeline with a predicate that panics on certain input
+    let main_pipeline = Pipeline::new("main")
+        .start_with(PassthroughStep)
+        // This predicate will panic on label "panic"
+        .fork_when(
+            |item: &TestItem| {
+                if item.label == "panic" {
+                    panic!("predicate panic!");
+                }
+                true
+            },
+            "target",
+        )
+        // Safe fallback that always matches
+        .fork_when(|_: &TestItem| true, "fallback")
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let target_pipeline = Pipeline::new("target")
+        .start_with(RecordingStep {
+            name: "target",
+            recorded: recorded.clone(),
+        })
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let fallback_pipeline = Pipeline::new("fallback")
+        .start_with(RecordingStep {
+            name: "fallback",
+            recorded: recorded.clone(),
+        })
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let runner = RunnerBuilder::new(store)
+        .pipeline(main_pipeline)
+        .pipeline(target_pipeline)
+        .pipeline(fallback_pipeline)
+        .poll_interval(Duration::from_millis(50))
+        .max_concurrent(2)
+        .build();
+
+    // Submit normal item - should go to both target and fallback
+    runner
+        .submit("main", TestItem { id: 1, label: "normal".to_string() })
+        .await
+        .unwrap();
+
+    tokio::select! {
+        _ = runner.run() => {}
+        _ = tokio::time::sleep(Duration::from_millis(500)) => {}
+    }
+
+    let recorded = recorded.lock().await;
+
+    // Normal items should be processed
+    assert!(recorded.contains(&"target:1".to_string()), "Normal item should reach target");
+    assert!(recorded.contains(&"fallback:1".to_string()), "Normal item should reach fallback");
+}
