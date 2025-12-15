@@ -71,21 +71,6 @@ pub struct DynamicSpawnNode {
     pub target_pipeline: String,
 }
 
-/// A declaration of work to spawn after pipeline completion.
-pub struct SpawnDeclaration<O> {
-    pub(crate) target: &'static str,
-    pub(crate) generator: SpawnGenerator<O>,
-}
-
-impl<O> Clone for SpawnDeclaration<O> {
-    fn clone(&self) -> Self {
-        Self {
-            target: self.target,
-            generator: self.generator.clone(),
-        }
-    }
-}
-
 /// Error returned by pipeline execution.
 #[derive(Error, Debug)]
 pub enum PipelineError {
