@@ -191,3 +191,23 @@ async fn test_to_graph_exports_structure() {
     assert_eq!(graph.fan_outs.len(), 1);
     assert_eq!(graph.fan_outs[0].targets, vec!["ml_pipeline", "stats_pipeline"]);
 }
+
+#[tokio::test]
+async fn test_graph_serializes_to_json() {
+    let pipeline = Pipeline::new("market_data")
+        .start_with(NormalizeStep)
+        .fork_when(|d: &MarketData| d.asset_class == "crypto", "crypto_pipeline")
+        .fan_out(&["ml_pipeline"])
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let graph = pipeline.to_graph();
+    let json = serde_json::to_string_pretty(&graph).unwrap();
+
+    // Verify it's valid JSON that can be parsed back
+    let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(parsed["name"], "market_data");
+    assert!(parsed["steps"].is_array());
+    assert!(parsed["forks"].is_array());
+    assert!(parsed["fan_outs"].is_array());
+}
