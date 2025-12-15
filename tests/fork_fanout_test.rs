@@ -335,3 +335,84 @@ async fn test_runner_executes_forked_tasks() {
     assert_eq!(processed.len(), 1);
     assert!(processed.contains(&"BTC".to_string()));
 }
+
+struct RecordingStep {
+    name: &'static str,
+    recorded: Arc<Mutex<Vec<String>>>,
+}
+
+#[async_trait]
+impl Step for RecordingStep {
+    type Input = MarketData;
+    type Output = MarketData;
+
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
+    async fn execute(&self, input: Self::Input) -> Result<Self::Output, StepError> {
+        self.recorded.lock().await.push(format!("{}:{}", self.name, input.symbol));
+        Ok(input)
+    }
+}
+
+#[tokio::test]
+async fn test_runner_executes_fan_out_to_all_targets() {
+    let pool = SqlitePool::connect(":memory:").await.unwrap();
+    let store = SqliteTaskStore::new(pool);
+    store.run_migrations().await.unwrap();
+
+    let recorded = Arc::new(Mutex::new(Vec::new()));
+
+    let main_pipeline = Pipeline::new("market_data")
+        .start_with(NormalizeStep)
+        .fan_out(&["ml_pipeline", "stats_pipeline"])
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let ml_pipeline = Pipeline::new("ml_pipeline")
+        .start_with(RecordingStep {
+            name: "ml_processor",
+            recorded: recorded.clone(),
+        })
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let stats_pipeline = Pipeline::new("stats_pipeline")
+        .start_with(RecordingStep {
+            name: "stats_processor",
+            recorded: recorded.clone(),
+        })
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let runner = RunnerBuilder::new(store)
+        .pipeline(main_pipeline)
+        .pipeline(ml_pipeline)
+        .pipeline(stats_pipeline)
+        .poll_interval(Duration::from_millis(50))
+        .max_concurrent(4)
+        .build();
+
+    runner
+        .submit(
+            "market_data",
+            MarketData {
+                symbol: "AAPL".to_string(),
+                asset_class: "equity".to_string(),
+                price: 150.0,
+            },
+        )
+        .await
+        .unwrap();
+
+    tokio::select! {
+        _ = runner.run() => {}
+        _ = tokio::time::sleep(Duration::from_millis(500)) => {}
+    }
+
+    let recorded = recorded.lock().await;
+    assert_eq!(recorded.len(), 2);
+    assert!(recorded.contains(&"ml_processor:AAPL".to_string()));
+    assert!(recorded.contains(&"stats_processor:AAPL".to_string()));
+}
