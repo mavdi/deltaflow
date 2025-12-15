@@ -1,8 +1,12 @@
 //! Tests for fork and fan-out functionality.
 
 use async_trait::async_trait;
-use deltaflow::{HasEntityId, NoopRecorder, Pipeline, Step, StepError};
+use deltaflow::{HasEntityId, NoopRecorder, Pipeline, RunnerBuilder, SqliteTaskStore, Step, StepError};
 use serde::{Deserialize, Serialize};
+use sqlx::SqlitePool;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::Mutex;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct MarketData {
@@ -226,4 +230,108 @@ async fn test_fork_when_with_description() {
 
     let graph = pipeline.to_graph();
     assert_eq!(graph.forks[0].condition, "routes crypto assets");
+}
+
+// ============================================================================
+// Runner Integration Tests
+// ============================================================================
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct ProcessedData {
+    symbol: String,
+    processed: bool,
+}
+
+impl HasEntityId for ProcessedData {
+    fn entity_id(&self) -> String {
+        self.symbol.clone()
+    }
+}
+
+struct CryptoProcessor {
+    processed: Arc<Mutex<Vec<String>>>,
+}
+
+#[async_trait]
+impl Step for CryptoProcessor {
+    type Input = MarketData;
+    type Output = ProcessedData;
+
+    fn name(&self) -> &'static str {
+        "crypto_processor"
+    }
+
+    async fn execute(&self, input: Self::Input) -> Result<Self::Output, StepError> {
+        self.processed.lock().await.push(input.symbol.clone());
+        Ok(ProcessedData {
+            symbol: input.symbol,
+            processed: true,
+        })
+    }
+}
+
+#[tokio::test]
+async fn test_runner_executes_forked_tasks() {
+    let pool = SqlitePool::connect(":memory:").await.unwrap();
+    let store = SqliteTaskStore::new(pool);
+    store.run_migrations().await.unwrap();
+
+    let crypto_processed = Arc::new(Mutex::new(Vec::new()));
+
+    let main_pipeline = Pipeline::new("market_data")
+        .start_with(NormalizeStep)
+        .fork_when(|d: &MarketData| d.asset_class == "crypto", "crypto_pipeline")
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let crypto_pipeline = Pipeline::new("crypto_pipeline")
+        .start_with(CryptoProcessor {
+            processed: crypto_processed.clone(),
+        })
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let runner = RunnerBuilder::new(store)
+        .pipeline(main_pipeline)
+        .pipeline(crypto_pipeline)
+        .poll_interval(Duration::from_millis(50))
+        .max_concurrent(2)
+        .build();
+
+    // Submit crypto data - should fork
+    runner
+        .submit(
+            "market_data",
+            MarketData {
+                symbol: "BTC".to_string(),
+                asset_class: "crypto".to_string(),
+                price: 50000.0,
+            },
+        )
+        .await
+        .unwrap();
+
+    // Submit equity data - should NOT fork
+    runner
+        .submit(
+            "market_data",
+            MarketData {
+                symbol: "AAPL".to_string(),
+                asset_class: "equity".to_string(),
+                price: 150.0,
+            },
+        )
+        .await
+        .unwrap();
+
+    // Let runner process
+    tokio::select! {
+        _ = runner.run() => {}
+        _ = tokio::time::sleep(Duration::from_millis(500)) => {}
+    }
+
+    // Only BTC should have been processed by crypto_pipeline
+    let processed = crypto_processed.lock().await;
+    assert_eq!(processed.len(), 1);
+    assert!(processed.contains(&"BTC".to_string()));
 }
