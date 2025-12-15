@@ -395,6 +395,16 @@ where
         self
     }
 
+    /// Fan out to multiple target pipelines unconditionally.
+    ///
+    /// The output is serialized and sent to ALL specified targets.
+    pub fn fan_out(mut self, targets: &[&'static str]) -> Self {
+        self.spawn_rules.push(SpawnRule::FanOut {
+            targets: targets.to_vec(),
+        });
+        self
+    }
+
     /// Build the pipeline, ready for execution.
     pub fn build(self) -> BuiltPipeline<I, O, Chain> {
         BuiltPipeline {

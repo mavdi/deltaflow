@@ -73,3 +73,28 @@ async fn test_fork_when_predicate_does_not_match() {
 
     assert_eq!(spawned.len(), 0);
 }
+
+#[tokio::test]
+async fn test_fan_out_spawns_to_all_targets() {
+    let pipeline = Pipeline::new("market_data")
+        .start_with(NormalizeStep)
+        .fan_out(&["ml_pipeline", "stats_pipeline", "alerts_pipeline"])
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let input = MarketData {
+        symbol: "AAPL".to_string(),
+        asset_class: "equity".to_string(),
+        price: 150.0,
+    };
+
+    let output = pipeline.run(input).await.unwrap();
+    let spawned = pipeline.get_spawned(&output);
+
+    assert_eq!(spawned.len(), 3);
+
+    let targets: Vec<&str> = spawned.iter().map(|(t, _)| *t).collect();
+    assert!(targets.contains(&"ml_pipeline"));
+    assert!(targets.contains(&"stats_pipeline"));
+    assert!(targets.contains(&"alerts_pipeline"));
+}
