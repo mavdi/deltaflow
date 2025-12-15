@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use deltaflow::{HasEntityId, NoopRecorder, Pipeline, RunnerBuilder, SqliteTaskStore, Step, StepError};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
@@ -186,4 +186,93 @@ async fn test_circuit_breaker_pattern() {
     assert!(primary.contains(&3), "Item 3 should reach primary");
     assert!(fallback.contains(&5), "Item 5 should go to fallback");
     assert!(fallback.contains(&6), "Item 6 should go to fallback");
+}
+
+#[tokio::test]
+async fn test_accumulator_routing() {
+    // Demonstrates: running total influences routing decisions
+    let pool = SqlitePool::connect(":memory:").await.unwrap();
+    let store = SqliteTaskStore::new(pool);
+    store.run_migrations().await.unwrap();
+
+    let running_total = Arc::new(AtomicU64::new(0));
+    let normal_recorded = Arc::new(Mutex::new(Vec::new()));
+    let overflow_recorded = Arc::new(Mutex::new(Vec::new()));
+
+    let threshold: u64 = 100;
+
+    // Main pipeline that accumulates and routes
+    let main_pipeline = Pipeline::new("main")
+        .start_with(PassthroughStep)
+        .fork_when(
+            {
+                let total = running_total.clone();
+                move |item: &DataItem| {
+                    let prev = total.fetch_add(item.value, Ordering::SeqCst);
+                    prev + item.value <= threshold
+                }
+            },
+            "normal",
+        )
+        .fork_when(
+            {
+                let total = running_total.clone();
+                move |_: &DataItem| total.load(Ordering::SeqCst) > threshold
+            },
+            "overflow",
+        )
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let normal_pipeline = Pipeline::new("normal")
+        .start_with(RecordingStep {
+            name: "normal_recorder",
+            recorded: normal_recorded.clone(),
+        })
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let overflow_pipeline = Pipeline::new("overflow")
+        .start_with(RecordingStep {
+            name: "overflow_recorder",
+            recorded: overflow_recorded.clone(),
+        })
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let runner = RunnerBuilder::new(store)
+        .pipeline(main_pipeline)
+        .pipeline(normal_pipeline)
+        .pipeline(overflow_pipeline)
+        .poll_interval(Duration::from_millis(50))
+        .max_concurrent(1)
+        .build();
+
+    // Submit items: values 30, 30, 30, 50, 50
+    // Running total: 30, 60, 90, 140, 190
+    // Items 1-3 (total <= 100) go to normal
+    // Items 4-5 (total > 100) go to overflow
+    let values = vec![30, 30, 30, 50, 50];
+    for (idx, value) in values.iter().enumerate() {
+        runner
+            .submit("main", DataItem { id: idx as u64 + 1, value: *value })
+            .await
+            .unwrap();
+    }
+
+    tokio::select! {
+        _ = runner.run() => {}
+        _ = tokio::time::sleep(Duration::from_millis(1000)) => {}
+    }
+
+    let normal = normal_recorded.lock().await;
+    let overflow = overflow_recorded.lock().await;
+
+    // First 3 items should go to normal
+    assert!(normal.contains(&1), "Item 1 should go to normal");
+    assert!(normal.contains(&2), "Item 2 should go to normal");
+    assert!(normal.contains(&3), "Item 3 should go to normal");
+
+    // Items 4-5 should go to overflow
+    assert!(overflow.contains(&4) || overflow.contains(&5), "Later items should go to overflow");
 }
