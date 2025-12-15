@@ -9,8 +9,31 @@ use crate::recorder::{NoopRecorder, Recorder, RunId, RunStatus, StepStatus};
 use crate::retry::RetryPolicy;
 use crate::step::{Step, StepError};
 
-/// Type alias for spawn generator functions.
+/// Type alias for fork predicate functions.
+type ForkPredicate<O> = Arc<dyn Fn(&O) -> bool + Send + Sync>;
+
+/// Type alias for dynamic spawn generator functions.
 type SpawnGenerator<O> = Arc<dyn Fn(&O) -> Vec<serde_json::Value> + Send + Sync>;
+
+/// A rule for spawning work after pipeline completion.
+#[derive(Clone)]
+pub enum SpawnRule<O> {
+    /// Conditional fork: spawn to target if predicate returns true.
+    Fork {
+        target: &'static str,
+        predicate: ForkPredicate<O>,
+        description: String,
+    },
+    /// Static fan-out: always spawn to these targets.
+    FanOut {
+        targets: Vec<&'static str>,
+    },
+    /// Dynamic spawn: generate tasks from output.
+    Dynamic {
+        target: &'static str,
+        generator: SpawnGenerator<O>,
+    },
+}
 
 /// A declaration of work to spawn after pipeline completion.
 pub struct SpawnDeclaration<O> {
