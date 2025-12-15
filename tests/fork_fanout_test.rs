@@ -211,3 +211,19 @@ async fn test_graph_serializes_to_json() {
     assert!(parsed["forks"].is_array());
     assert!(parsed["fan_outs"].is_array());
 }
+
+#[tokio::test]
+async fn test_fork_when_with_description() {
+    let pipeline = Pipeline::new("market_data")
+        .start_with(NormalizeStep)
+        .fork_when_desc(
+            |d: &MarketData| d.asset_class == "crypto",
+            "crypto_pipeline",
+            "routes crypto assets",
+        )
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let graph = pipeline.to_graph();
+    assert_eq!(graph.forks[0].condition, "routes crypto assets");
+}

@@ -441,6 +441,24 @@ where
         self
     }
 
+    /// Conditionally fork with a custom description for visualization.
+    pub fn fork_when_desc<F>(
+        mut self,
+        predicate: F,
+        target: &'static str,
+        description: &str,
+    ) -> Self
+    where
+        F: Fn(&O) -> bool + Send + Sync + 'static,
+    {
+        self.spawn_rules.push(SpawnRule::Fork {
+            target,
+            predicate: Arc::new(predicate),
+            description: description.to_string(),
+        });
+        self
+    }
+
     /// Fan out to multiple target pipelines unconditionally.
     ///
     /// The output is serialized and sent to ALL specified targets.
