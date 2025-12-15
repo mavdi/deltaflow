@@ -4,3 +4,6 @@
 
 # Internal planning documents
 /docs/plans
+
+# Git worktrees
+/.worktrees/
