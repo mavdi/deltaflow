@@ -2,11 +2,12 @@
 
 use async_trait::async_trait;
 use deltaflow::{HasEntityId, NoopRecorder, Pipeline, RetryPolicy, Step, StepError};
+use serde::Serialize;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
 // Test input type
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 struct TestInput {
     id: String,
     value: u32,

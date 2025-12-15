@@ -503,7 +503,7 @@ where
 impl<I, O, Chain> BuiltPipeline<I, O, Chain>
 where
     I: Send + Clone + HasEntityId + 'static,
-    O: Send + 'static,
+    O: Send + Serialize + 'static,
     Chain: StepChain<I, O> + Send + Sync,
 {
     /// Execute the pipeline with the given input.
@@ -543,13 +543,32 @@ where
 
     /// Get spawned tasks for the given output.
     pub fn get_spawned(&self, output: &O) -> Vec<(&'static str, serde_json::Value)> {
-        self.spawn_rules
-            .iter()
-            .flat_map(|decl| {
-                (decl.generator)(output)
-                    .into_iter()
-                    .map(|input| (decl.target, input))
-            })
-            .collect()
+        let mut spawned = Vec::new();
+
+        for rule in &self.spawn_rules {
+            match rule {
+                SpawnRule::Fork { target, predicate, .. } => {
+                    if predicate(output) {
+                        if let Ok(value) = serde_json::to_value(output) {
+                            spawned.push((*target, value));
+                        }
+                    }
+                }
+                SpawnRule::FanOut { targets } => {
+                    if let Ok(value) = serde_json::to_value(output) {
+                        for target in targets {
+                            spawned.push((*target, value.clone()));
+                        }
+                    }
+                }
+                SpawnRule::Dynamic { target, generator } => {
+                    for input in generator(output) {
+                        spawned.push((*target, input));
+                    }
+                }
+            }
+        }
+
+        spawned
     }
 }

@@ -23,8 +23,9 @@ impl HasEntityId for VideoInput {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 struct VideoOutput {
+    #[allow(dead_code)]
     id: String,
     tickers: Vec<String>,
 }

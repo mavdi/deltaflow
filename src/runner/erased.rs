@@ -2,6 +2,7 @@
 
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 
 use crate::pipeline::{BuiltPipeline, HasEntityId, StepChain};
 use super::store::TaskError;
@@ -30,11 +31,11 @@ pub struct SpawnedTask {
 impl<I, O, Chain> ErasedPipeline for BuiltPipeline<I, O, Chain>
 where
     I: Send + Sync + Clone + HasEntityId + DeserializeOwned + 'static,
-    O: Send + Sync + 'static,
+    O: Send + Sync + Serialize + 'static,
     Chain: StepChain<I, O> + Send + Sync + 'static,
 {
     fn name(&self) -> &'static str {
-        self.name()
+        BuiltPipeline::name(self)
     }
 
     async fn run_erased(

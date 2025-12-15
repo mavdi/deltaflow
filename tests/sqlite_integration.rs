@@ -4,10 +4,11 @@
 
 use async_trait::async_trait;
 use deltaflow::{HasEntityId, Pipeline, RetryPolicy, SqliteRecorder, Step, StepError};
+use serde::Serialize;
 use sqlx::sqlite::SqlitePoolOptions;
 
 // Test input type
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 struct TestInput {
     id: String,
     value: u32,

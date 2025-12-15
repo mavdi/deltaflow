@@ -9,11 +9,12 @@
 
 use async_trait::async_trait;
 use deltaflow::{HasEntityId, NoopRecorder, Pipeline, RetryPolicy, Step, StepError};
+use serde::Serialize;
 
 /// Input type that wraps a string and provides an entity ID.
 ///
 /// The entity ID is used for tracking pipeline runs in the recorder.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 struct Input {
     id: String,
     value: String,
@@ -26,7 +27,7 @@ impl HasEntityId for Input {
 }
 
 /// Intermediate type holding a parsed number.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 struct Number {
     id: String,
     value: i32,
@@ -39,7 +40,7 @@ impl HasEntityId for Number {
 }
 
 /// Output type with a formatted message.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 struct Output {
     id: String,
     message: String,
