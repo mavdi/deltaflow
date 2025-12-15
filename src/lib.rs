@@ -38,7 +38,10 @@ pub mod recorder;
 pub mod retry;
 pub mod step;
 
-pub use pipeline::{BuiltPipeline, HasEntityId, Pipeline, PipelineError};
+pub use pipeline::{
+    BuiltPipeline, DynamicSpawnNode, FanOutNode, ForkNode, HasEntityId, Pipeline,
+    PipelineError, PipelineGraph, SpawnRule, StepNode,
+};
 pub use recorder::{NoopRecorder, Recorder, RunId, RunStatus, StepId, StepStatus};
 pub use retry::RetryPolicy;
 pub use step::{Step, StepError};
