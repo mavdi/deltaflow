@@ -17,6 +17,12 @@ impl HasEntityId for MarketData {
     }
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct AlertRequest {
+    symbol: String,
+    alert_type: String,
+}
+
 struct NormalizeStep;
 
 #[async_trait]
@@ -97,4 +103,69 @@ async fn test_fan_out_spawns_to_all_targets() {
     assert!(targets.contains(&"ml_pipeline"));
     assert!(targets.contains(&"stats_pipeline"));
     assert!(targets.contains(&"alerts_pipeline"));
+}
+
+#[tokio::test]
+async fn test_multiple_forks_all_matching_fire() {
+    let pipeline = Pipeline::new("market_data")
+        .start_with(NormalizeStep)
+        .fork_when(|d: &MarketData| d.asset_class == "crypto", "crypto_pipeline")
+        .fork_when(|d: &MarketData| d.price > 10000.0, "high_value_pipeline")
+        .fork_when(|d: &MarketData| d.symbol.len() <= 4, "short_symbol_pipeline")
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let input = MarketData {
+        symbol: "BTC".to_string(),
+        asset_class: "crypto".to_string(),
+        price: 50000.0,
+    };
+
+    let output = pipeline.run(input).await.unwrap();
+    let spawned = pipeline.get_spawned(&output);
+
+    // All three predicates match
+    assert_eq!(spawned.len(), 3);
+
+    let targets: Vec<&str> = spawned.iter().map(|(t, _)| *t).collect();
+    assert!(targets.contains(&"crypto_pipeline"));
+    assert!(targets.contains(&"high_value_pipeline"));
+    assert!(targets.contains(&"short_symbol_pipeline"));
+}
+
+#[tokio::test]
+async fn test_combined_fork_fanout_spawn_from() {
+    let pipeline = Pipeline::new("market_data")
+        .start_with(NormalizeStep)
+        .fork_when(|d: &MarketData| d.asset_class == "crypto", "crypto_pipeline")
+        .fan_out(&["audit_pipeline"])
+        .spawn_from("alert_pipeline", |d: &MarketData| {
+            if d.price > 40000.0 {
+                vec![AlertRequest {
+                    symbol: d.symbol.clone(),
+                    alert_type: "high_price".to_string(),
+                }]
+            } else {
+                vec![]
+            }
+        })
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let input = MarketData {
+        symbol: "BTC".to_string(),
+        asset_class: "crypto".to_string(),
+        price: 50000.0,
+    };
+
+    let output = pipeline.run(input).await.unwrap();
+    let spawned = pipeline.get_spawned(&output);
+
+    // crypto_pipeline (fork matches) + audit_pipeline (fan-out) + alert_pipeline (spawn_from)
+    assert_eq!(spawned.len(), 3);
+
+    let targets: Vec<&str> = spawned.iter().map(|(t, _)| *t).collect();
+    assert!(targets.contains(&"crypto_pipeline"));
+    assert!(targets.contains(&"audit_pipeline"));
+    assert!(targets.contains(&"alert_pipeline"));
 }
