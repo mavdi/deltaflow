@@ -128,7 +128,7 @@ async fn test_runner_spawns_followup_tasks() {
     let video_pipeline = Pipeline::new("process_video")
         .start_with(ExtractTickers)
         .with_recorder(NoopRecorder)
-        .spawns("fetch_price", |output: &VideoOutput| {
+        .spawn_from("fetch_price", |output: &VideoOutput| {
             output.tickers.iter()
                 .map(|t| PriceRequest { ticker: t.clone() })
                 .collect()
