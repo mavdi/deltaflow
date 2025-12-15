@@ -161,3 +161,84 @@ async fn test_step_failure_sibling_branches_continue() {
     assert!(recorded.contains(&"c:1".to_string()), "Branch C should complete");
     assert_eq!(recorded.len(), 2, "Only A and C should record");
 }
+
+#[tokio::test]
+async fn test_branch_isolation_downstream_failure() {
+    // Demonstrates: failure in B's downstream (D) doesn't affect C's downstream (E)
+    // A -> fan_out -> [B, C]
+    // B -> D (fails)
+    // C -> E (succeeds)
+    let pool = SqlitePool::connect(":memory:").await.unwrap();
+    let store = SqliteTaskStore::new(pool);
+    store.run_migrations().await.unwrap();
+
+    let recorded = Arc::new(Mutex::new(Vec::new()));
+
+    let pipeline_a = Pipeline::new("A")
+        .start_with(PassthroughStep)
+        .fan_out(&["B", "C"])
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let pipeline_b = Pipeline::new("B")
+        .start_with(RecordingStep {
+            name: "B",
+            recorded: recorded.clone(),
+        })
+        .fan_out(&["D"])
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let pipeline_c = Pipeline::new("C")
+        .start_with(RecordingStep {
+            name: "C",
+            recorded: recorded.clone(),
+        })
+        .fan_out(&["E"])
+        .with_recorder(NoopRecorder)
+        .build();
+
+    // D always fails
+    let pipeline_d = Pipeline::new("D")
+        .start_with(AlwaysFailsStep { name: "D_fail" })
+        .with_recorder(NoopRecorder)
+        .build();
+
+    // E always succeeds
+    let pipeline_e = Pipeline::new("E")
+        .start_with(RecordingStep {
+            name: "E",
+            recorded: recorded.clone(),
+        })
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let runner = RunnerBuilder::new(store)
+        .pipeline(pipeline_a)
+        .pipeline(pipeline_b)
+        .pipeline(pipeline_c)
+        .pipeline(pipeline_d)
+        .pipeline(pipeline_e)
+        .poll_interval(Duration::from_millis(50))
+        .max_concurrent(4)
+        .build();
+
+    runner
+        .submit("A", TestItem { id: 1, label: "cascade".to_string() })
+        .await
+        .unwrap();
+
+    tokio::select! {
+        _ = runner.run() => {}
+        _ = tokio::time::sleep(Duration::from_millis(800)) => {}
+    }
+
+    let recorded = recorded.lock().await;
+
+    // B and C should both complete
+    assert!(recorded.contains(&"B:1".to_string()), "Pipeline B should complete");
+    assert!(recorded.contains(&"C:1".to_string()), "Pipeline C should complete");
+
+    // E should complete even though D failed
+    assert!(recorded.contains(&"E:1".to_string()), "Pipeline E should complete despite D failing");
+}
