@@ -416,3 +416,50 @@ async fn test_runner_executes_fan_out_to_all_targets() {
     assert!(recorded.contains(&"ml_processor:AAPL".to_string()));
     assert!(recorded.contains(&"stats_processor:AAPL".to_string()));
 }
+
+#[tokio::test]
+async fn test_fork_to_unknown_pipeline_fails_gracefully() {
+    let pool = SqlitePool::connect(":memory:").await.unwrap();
+    let pool_clone = pool.clone();
+    let store = SqliteTaskStore::new(pool);
+    store.run_migrations().await.unwrap();
+
+    let main_pipeline = Pipeline::new("market_data")
+        .start_with(NormalizeStep)
+        .fork_when(|_: &MarketData| true, "nonexistent_pipeline")
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let runner = RunnerBuilder::new(store)
+        .pipeline(main_pipeline)
+        .poll_interval(Duration::from_millis(50))
+        .max_concurrent(1)
+        .build();
+
+    runner
+        .submit(
+            "market_data",
+            MarketData {
+                symbol: "BTC".to_string(),
+                asset_class: "crypto".to_string(),
+                price: 50000.0,
+            },
+        )
+        .await
+        .unwrap();
+
+    tokio::select! {
+        _ = runner.run() => {}
+        _ = tokio::time::sleep(Duration::from_millis(300)) => {}
+    }
+
+    // The spawned task to nonexistent_pipeline should be failed
+    let failed_tasks: Vec<(String, String)> = sqlx::query_as(
+        "SELECT pipeline, status FROM delta_tasks WHERE status = 'failed'"
+    )
+    .fetch_all(&pool_clone)
+    .await
+    .unwrap();
+
+    assert!(failed_tasks.iter().any(|(p, _)| p == "nonexistent_pipeline"));
+}
