@@ -99,6 +99,43 @@ runner.submit("process_order", order).await?;
 runner.run().await;
 ```
 
+### Forking and Fan-out
+
+Route pipeline output to multiple downstream pipelines:
+
+```rust
+let pipeline = Pipeline::new("market_data")
+    .start_with(ValidateStep)
+    .then(NormalizeStep)
+
+    // Conditional fork - only triggers when predicate is true
+    .fork_when(|d| d.asset_class == "crypto", "crypto_analysis")
+    .fork_when(|d| d.asset_class == "equity", "equity_analysis")
+
+    // Static fan-out - always sends to all targets
+    .fan_out(&["ml_pipeline", "stats_pipeline"])
+
+    // Dynamic spawn - generate tasks from output
+    .spawn_from("alerts", |d| {
+        if d.price_change > 0.05 {
+            vec![Alert { symbol: d.symbol.clone() }]
+        } else {
+            vec![]
+        }
+    })
+    .build();
+```
+
+### Pipeline Visualization
+
+Export pipeline structure for visualization tools:
+
+```rust
+let graph = pipeline.to_graph();
+let json = serde_json::to_string_pretty(&graph)?;
+// Returns JSON with steps, forks, fan_outs, dynamic_spawns
+```
+
 ## Periodic Scheduler
 
 For time-based task enqueueing, use `PeriodicScheduler`:
