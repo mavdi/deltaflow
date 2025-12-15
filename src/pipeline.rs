@@ -35,6 +35,42 @@ pub enum SpawnRule<O> {
     },
 }
 
+/// Serializable representation of a pipeline's structure for visualization.
+#[derive(Debug, Clone, Serialize)]
+pub struct PipelineGraph {
+    pub name: String,
+    pub steps: Vec<StepNode>,
+    pub forks: Vec<ForkNode>,
+    pub fan_outs: Vec<FanOutNode>,
+    pub dynamic_spawns: Vec<DynamicSpawnNode>,
+}
+
+/// A step in the pipeline graph.
+#[derive(Debug, Clone, Serialize)]
+pub struct StepNode {
+    pub name: String,
+    pub index: usize,
+}
+
+/// A conditional fork declaration.
+#[derive(Debug, Clone, Serialize)]
+pub struct ForkNode {
+    pub target_pipeline: String,
+    pub condition: String,
+}
+
+/// A static fan-out declaration.
+#[derive(Debug, Clone, Serialize)]
+pub struct FanOutNode {
+    pub targets: Vec<String>,
+}
+
+/// A dynamic spawn declaration.
+#[derive(Debug, Clone, Serialize)]
+pub struct DynamicSpawnNode {
+    pub target_pipeline: String,
+}
+
 /// A declaration of work to spawn after pipeline completion.
 pub struct SpawnDeclaration<O> {
     pub(crate) target: &'static str,
@@ -136,6 +172,9 @@ pub trait StepChain<I, O>: Send + Sync {
 
     /// Returns the number of steps in this chain.
     fn step_count(&self) -> u32;
+
+    /// Collect step names in order.
+    fn collect_step_names(&self, names: &mut Vec<&'static str>);
 }
 
 /// Terminal chain - identity transform.
@@ -158,6 +197,8 @@ impl<T: Send + 'static> StepChain<T, T> for Identity {
     fn step_count(&self) -> u32 {
         0
     }
+
+    fn collect_step_names(&self, _names: &mut Vec<&'static str>) {}
 }
 
 /// Chain that runs a step then continues with the rest.
@@ -248,6 +289,11 @@ where
 
     fn step_count(&self) -> u32 {
         1 + self.next.step_count()
+    }
+
+    fn collect_step_names(&self, names: &mut Vec<&'static str>) {
+        names.push(self.step.name());
+        self.next.collect_step_names(names);
     }
 }
 
@@ -511,6 +557,11 @@ where
     fn step_count(&self) -> u32 {
         self.first.step_count() + 1
     }
+
+    fn collect_step_names(&self, names: &mut Vec<&'static str>) {
+        self.first.collect_step_names(names);
+        names.push(self.step.name());
+    }
 }
 
 /// A built pipeline ready for execution.
@@ -596,5 +647,53 @@ where
         }
 
         spawned
+    }
+
+    /// Export the pipeline structure as a graph for visualization.
+    pub fn to_graph(&self) -> PipelineGraph {
+        let mut step_names = Vec::new();
+        self.chain.collect_step_names(&mut step_names);
+
+        let steps: Vec<StepNode> = step_names
+            .into_iter()
+            .enumerate()
+            .map(|(index, name)| StepNode {
+                name: name.to_string(),
+                index,
+            })
+            .collect();
+
+        let mut forks = Vec::new();
+        let mut fan_outs = Vec::new();
+        let mut dynamic_spawns = Vec::new();
+
+        for rule in &self.spawn_rules {
+            match rule {
+                SpawnRule::Fork { target, description, .. } => {
+                    forks.push(ForkNode {
+                        target_pipeline: target.to_string(),
+                        condition: description.clone(),
+                    });
+                }
+                SpawnRule::FanOut { targets } => {
+                    fan_outs.push(FanOutNode {
+                        targets: targets.iter().map(|s| s.to_string()).collect(),
+                    });
+                }
+                SpawnRule::Dynamic { target, .. } => {
+                    dynamic_spawns.push(DynamicSpawnNode {
+                        target_pipeline: target.to_string(),
+                    });
+                }
+            }
+        }
+
+        PipelineGraph {
+            name: self.name.to_string(),
+            steps,
+            forks,
+            fan_outs,
+            dynamic_spawns,
+        }
     }
 }

@@ -169,3 +169,25 @@ async fn test_combined_fork_fanout_spawn_from() {
     assert!(targets.contains(&"audit_pipeline"));
     assert!(targets.contains(&"alert_pipeline"));
 }
+
+#[tokio::test]
+async fn test_to_graph_exports_structure() {
+    let pipeline = Pipeline::new("market_data")
+        .start_with(NormalizeStep)
+        .fork_when(|d: &MarketData| d.asset_class == "crypto", "crypto_pipeline")
+        .fan_out(&["ml_pipeline", "stats_pipeline"])
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let graph = pipeline.to_graph();
+
+    assert_eq!(graph.name, "market_data");
+    assert_eq!(graph.steps.len(), 1);
+    assert_eq!(graph.steps[0].name, "normalize");
+
+    assert_eq!(graph.forks.len(), 1);
+    assert_eq!(graph.forks[0].target_pipeline, "crypto_pipeline");
+
+    assert_eq!(graph.fan_outs.len(), 1);
+    assert_eq!(graph.fan_outs[0].targets, vec!["ml_pipeline", "stats_pipeline"]);
+}
