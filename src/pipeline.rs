@@ -379,6 +379,22 @@ where
         self.spawn_from(target, f)
     }
 
+    /// Conditionally fork to a target pipeline when predicate returns true.
+    ///
+    /// The output is serialized and sent to the target pipeline.
+    /// Multiple forks can match - they are not mutually exclusive.
+    pub fn fork_when<F>(mut self, predicate: F, target: &'static str) -> Self
+    where
+        F: Fn(&O) -> bool + Send + Sync + 'static,
+    {
+        self.spawn_rules.push(SpawnRule::Fork {
+            target,
+            predicate: Arc::new(predicate),
+            description: format!("fork to {}", target),
+        });
+        self
+    }
+
     /// Build the pipeline, ready for execution.
     pub fn build(self) -> BuiltPipeline<I, O, Chain> {
         BuiltPipeline {
