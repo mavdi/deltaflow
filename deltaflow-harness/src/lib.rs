@@ -15,7 +15,7 @@
 //!
 //! ```no_run
 //! use deltaflow::{Pipeline, Step, StepError, RunnerBuilder, SqliteTaskStore, HasEntityId};
-//! use deltaflow_harness::RunnerVisualizerExt;
+//! use deltaflow_harness::RunnerHarnessExt;
 //! use async_trait::async_trait;
 //! use serde::{Deserialize, Serialize};
 //!
@@ -68,4 +68,4 @@ mod ext;
 mod graph;
 mod server;
 
-pub use ext::RunnerVisualizerExt;
+pub use ext::RunnerHarnessExt;

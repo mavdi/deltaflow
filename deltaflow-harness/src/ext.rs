@@ -8,7 +8,7 @@ use crate::graph::GraphResponse;
 use crate::server::{run_server, VisualizerState};
 
 /// Extension trait that adds visualization to RunnerBuilder.
-pub trait RunnerVisualizerExt<S: TaskStore + 'static>: Sized {
+pub trait RunnerHarnessExt<S: TaskStore + 'static>: Sized {
     /// Enable the web visualizer on the given port.
     ///
     /// This spawns an HTTP server in the background that serves
@@ -16,7 +16,7 @@ pub trait RunnerVisualizerExt<S: TaskStore + 'static>: Sized {
     fn with_visualizer(self, port: u16) -> Self;
 }
 
-impl<S: TaskStore + 'static> RunnerVisualizerExt<S> for RunnerBuilder<S> {
+impl<S: TaskStore + 'static> RunnerHarnessExt<S> for RunnerBuilder<S> {
     fn with_visualizer(self, port: u16) -> Self {
         // Extract graphs from registered pipelines
         let graphs: Vec<PipelineGraph> = self.get_pipeline_graphs();
