@@ -174,6 +174,14 @@ impl<S: TaskStore + 'static> RunnerBuilder<S> {
         self
     }
 
+    /// Get graphs from all registered pipelines (for visualization).
+    pub fn get_pipeline_graphs(&self) -> Vec<crate::pipeline::PipelineGraph> {
+        self.pipelines
+            .values()
+            .map(|p| p.to_graph())
+            .collect()
+    }
+
     /// Build the runner.
     pub fn build(self) -> Runner<S> {
         let pipeline_semaphores = self
