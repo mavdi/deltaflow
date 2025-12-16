@@ -285,3 +285,119 @@ async fn test_late_arrival_routing() {
     assert!(late.contains(&5), "Item 5 should be late");
     assert!(late.contains(&6), "Item 6 should be late");
 }
+
+struct PriorityPassthroughStep;
+
+#[async_trait]
+impl Step for PriorityPassthroughStep {
+    type Input = PriorityItem;
+    type Output = PriorityItem;
+
+    fn name(&self) -> &'static str {
+        "priority_passthrough"
+    }
+
+    async fn execute(&self, input: Self::Input) -> Result<Self::Output, StepError> {
+        Ok(input)
+    }
+}
+
+struct PriorityRecordingStep {
+    name: &'static str,
+    recorded: Arc<Mutex<Vec<u64>>>,
+}
+
+#[async_trait]
+impl Step for PriorityRecordingStep {
+    type Input = PriorityItem;
+    type Output = PriorityItem;
+
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
+    async fn execute(&self, input: Self::Input) -> Result<Self::Output, StepError> {
+        self.recorded.lock().await.push(input.id);
+        Ok(input)
+    }
+}
+
+#[tokio::test]
+async fn test_priority_routing() {
+    // Demonstrates: high priority items route to urgent pipeline
+    let pool = SqlitePool::connect(":memory:").await.unwrap();
+    let store = SqliteTaskStore::new(pool);
+    store.run_migrations().await.unwrap();
+
+    let urgent_recorded = Arc::new(Mutex::new(Vec::new()));
+    let standard_recorded = Arc::new(Mutex::new(Vec::new()));
+
+    let main_pipeline = Pipeline::new("main")
+        .start_with(PriorityPassthroughStep)
+        .fork_when(
+            |item: &PriorityItem| item.priority == Priority::High,
+            "urgent",
+        )
+        .fork_when(
+            |item: &PriorityItem| item.priority == Priority::Normal,
+            "standard",
+        )
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let urgent_pipeline = Pipeline::new("urgent")
+        .start_with(PriorityRecordingStep {
+            name: "urgent",
+            recorded: urgent_recorded.clone(),
+        })
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let standard_pipeline = Pipeline::new("standard")
+        .start_with(PriorityRecordingStep {
+            name: "standard",
+            recorded: standard_recorded.clone(),
+        })
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let runner = RunnerBuilder::new(store)
+        .pipeline(main_pipeline)
+        .pipeline(urgent_pipeline)
+        .pipeline(standard_pipeline)
+        .poll_interval(Duration::from_millis(50))
+        .max_concurrent(2)
+        .build();
+
+    // Interleaved priorities: normal, high, normal, high, normal
+    let items = vec![
+        PriorityItem { id: 1, priority: Priority::Normal },
+        PriorityItem { id: 2, priority: Priority::High },
+        PriorityItem { id: 3, priority: Priority::Normal },
+        PriorityItem { id: 4, priority: Priority::High },
+        PriorityItem { id: 5, priority: Priority::Normal },
+    ];
+
+    for item in items {
+        runner.submit("main", item).await.unwrap();
+    }
+
+    tokio::select! {
+        _ = runner.run() => {}
+        _ = tokio::time::sleep(Duration::from_millis(800)) => {}
+    }
+
+    let urgent = urgent_recorded.lock().await;
+    let standard = standard_recorded.lock().await;
+
+    // High priority items (2, 4) go to urgent
+    assert!(urgent.contains(&2), "Item 2 should go to urgent");
+    assert!(urgent.contains(&4), "Item 4 should go to urgent");
+    assert_eq!(urgent.len(), 2, "Only high priority items in urgent");
+
+    // Normal priority items (1, 3, 5) go to standard
+    assert!(standard.contains(&1), "Item 1 should go to standard");
+    assert!(standard.contains(&3), "Item 3 should go to standard");
+    assert!(standard.contains(&5), "Item 5 should go to standard");
+    assert_eq!(standard.len(), 3, "Only normal priority items in standard");
+}
