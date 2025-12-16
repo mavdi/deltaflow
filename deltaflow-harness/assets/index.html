@@ -95,12 +95,13 @@ function layout(data) {
     });
 
     // Detect cycles using DFS, mark back-edges
+    // IMPORTANT: Start DFS only from true roots (no incoming edges)
     const visited = new Set();
     const inStack = new Set();
     const backEdges = new Set(); // "from->to" strings
 
     function detectCycles(node) {
-        if (inStack.has(node)) return; // cycle detected
+        if (inStack.has(node)) return;
         if (visited.has(node)) return;
 
         visited.add(node);
@@ -117,7 +118,17 @@ function layout(data) {
         inStack.delete(node);
     }
 
-    data.pipelines.forEach(p => detectCycles(p.name));
+    // Find true roots (no incoming edges) and start DFS from them
+    const trueRoots = data.pipelines.filter(p =>
+        (incoming.get(p.name) || []).length === 0
+    );
+    trueRoots.forEach(p => detectCycles(p.name));
+
+    // If some nodes weren't visited (disconnected or all in cycles), visit them too
+    data.pipelines.forEach(p => {
+        if (!visited.has(p.name)) detectCycles(p.name);
+    });
+
 
     // Compute columns: column[p] = max(column[sources] + 1), roots = 0
     const column = new Map();
@@ -134,7 +145,7 @@ function layout(data) {
     });
 
     // Iteratively assign columns
-    let maxIter = data.pipelines.length;
+    let maxIter = data.pipelines.length * 2;
     while (remaining.size > 0 && maxIter-- > 0) {
         for (const name of remaining) {
             const sources = incoming.get(name) || [];
@@ -158,6 +169,7 @@ function layout(data) {
 
     // Position pipelines column by column
     const maxCols = columns.size > 0 ? Math.max(...columns.keys()) + 1 : 0;
+    let columnX = PADDING; // Track X position for each column
 
     for (let col = 0; col < maxCols; col++) {
         const names = columns.get(col) || [];
@@ -177,15 +189,25 @@ function layout(data) {
             });
         }
 
+        // Calculate max width in this column
+        let maxWidth = 0;
+        for (const name of names) {
+            const pipeline = data.pipelines.find(p => p.name === name);
+            const width = pipeline.steps.length * (STEP_WIDTH + STEP_GAP) - STEP_GAP;
+            if (width > maxWidth) maxWidth = width;
+        }
+
         // Position this column
         let y = PADDING;
         for (const name of names) {
             const pipeline = data.pipelines.find(p => p.name === name);
             const width = pipeline.steps.length * (STEP_WIDTH + STEP_GAP) - STEP_GAP;
-            const x = PADDING + col * COLUMN_GAP;
-            pipelinePositions.set(name, { x, y, width, column: col });
+            pipelinePositions.set(name, { x: columnX, y, width, column: col });
             y += STEP_HEIGHT + PIPELINE_GAP;
         }
+
+        // Move X to next column (max width + gap for arrows)
+        columnX += maxWidth + COLUMN_GAP;
     }
 }
 
@@ -241,13 +263,22 @@ function render() {
         ctx.moveTo(branchX + 8, branchY);
 
         if (isBackward) {
-            // Backward arrow: go around
-            const midY = Math.min(fromY, toY) - 40;
+            // Backward arrow: route above all pipelines, enter target from top
+            const midY = 15; // Just above pipeline labels (PADDING is 40)
+            const targetCenterX = toX + STEP_WIDTH / 2; // Center of first step
             ctx.lineTo(branchX + 30, branchY);
             ctx.lineTo(branchX + 30, midY);
-            ctx.lineTo(toX - 30, midY);
-            ctx.lineTo(toX - 30, toY);
-            ctx.lineTo(toX - 10, toY);
+            ctx.lineTo(targetCenterX, midY);
+            ctx.lineTo(targetCenterX, toY - 15); // Stop above the step
+            ctx.stroke();
+
+            // Arrow head pointing down into the step
+            ctx.beginPath();
+            ctx.moveTo(targetCenterX - 6, toY - 20);
+            ctx.lineTo(targetCenterX, toY - 8);
+            ctx.lineTo(targetCenterX + 6, toY - 20);
+            ctx.closePath();
+            ctx.fill();
         } else {
             // Forward arrow: S-curve
             const midX = (branchX + toX) / 2;
@@ -259,14 +290,16 @@ function render() {
         }
         ctx.stroke();
 
-        // Arrow head at target
-        ctx.fillStyle = COLOR_FORK;
-        ctx.beginPath();
-        ctx.moveTo(toX - 18, toY - 6);
-        ctx.lineTo(toX - 6, toY);
-        ctx.lineTo(toX - 18, toY + 6);
-        ctx.closePath();
-        ctx.fill();
+        // Arrow head at target (only for forward arrows - backward arrows draw their own)
+        if (!isBackward) {
+            ctx.fillStyle = COLOR_FORK;
+            ctx.beginPath();
+            ctx.moveTo(toX - 18, toY - 6);
+            ctx.lineTo(toX - 6, toY);
+            ctx.lineTo(toX - 18, toY + 6);
+            ctx.closePath();
+            ctx.fill();
+        }
 
         // Connection type label
         const typeName = conn.type === 'fork' ? 'fork'
