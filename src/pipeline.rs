@@ -25,9 +25,7 @@ pub enum SpawnRule<O> {
         description: String,
     },
     /// Static fan-out: always spawn to these targets.
-    FanOut {
-        targets: Vec<&'static str>,
-    },
+    FanOut { targets: Vec<&'static str> },
     /// Dynamic spawn: generate tasks from output.
     Dynamic {
         target: &'static str,
@@ -627,7 +625,9 @@ where
 
         for rule in &self.spawn_rules {
             match rule {
-                SpawnRule::Fork { target, predicate, .. } => {
+                SpawnRule::Fork {
+                    target, predicate, ..
+                } => {
                     if predicate(output) {
                         if let Ok(value) = serde_json::to_value(output) {
                             spawned.push((*target, value));
@@ -672,7 +672,11 @@ where
 
         for rule in &self.spawn_rules {
             match rule {
-                SpawnRule::Fork { target, description, .. } => {
+                SpawnRule::Fork {
+                    target,
+                    description,
+                    ..
+                } => {
                     forks.push(ForkNode {
                         target_pipeline: target.to_string(),
                         condition: description.clone(),

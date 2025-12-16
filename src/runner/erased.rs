@@ -4,8 +4,8 @@ use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use crate::pipeline::{BuiltPipeline, HasEntityId, StepChain};
 use super::store::TaskError;
+use crate::pipeline::{BuiltPipeline, HasEntityId, PipelineGraph, StepChain};
 
 /// Type-erased pipeline that can be stored in a registry.
 #[async_trait]
@@ -13,11 +13,11 @@ pub trait ErasedPipeline: Send + Sync {
     /// Get the pipeline name.
     fn name(&self) -> &'static str;
 
+    /// Get the pipeline graph for visualization.
+    fn to_graph(&self) -> PipelineGraph;
+
     /// Run the pipeline with JSON input, return spawned work.
-    async fn run_erased(
-        &self,
-        input: serde_json::Value,
-    ) -> Result<Vec<SpawnedTask>, TaskError>;
+    async fn run_erased(&self, input: serde_json::Value) -> Result<Vec<SpawnedTask>, TaskError>;
 }
 
 /// A task to be spawned after pipeline completion.
@@ -38,16 +38,18 @@ where
         BuiltPipeline::name(self)
     }
 
-    async fn run_erased(
-        &self,
-        input: serde_json::Value,
-    ) -> Result<Vec<SpawnedTask>, TaskError> {
+    fn to_graph(&self) -> PipelineGraph {
+        BuiltPipeline::to_graph(self)
+    }
+
+    async fn run_erased(&self, input: serde_json::Value) -> Result<Vec<SpawnedTask>, TaskError> {
         let typed_input: I = serde_json::from_value(input)
             .map_err(|e| TaskError::DeserializationError(e.to_string()))?;
 
-        let output = self.run(typed_input).await.map_err(|e| {
-            TaskError::PipelineError(e.to_string())
-        })?;
+        let output = self
+            .run(typed_input)
+            .await
+            .map_err(|e| TaskError::PipelineError(e.to_string()))?;
 
         let spawned: Vec<SpawnedTask> = self
             .get_spawned(&output)

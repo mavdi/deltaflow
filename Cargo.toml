@@ -1,3 +1,6 @@
+[workspace]
+members = [".", "deltaflow-visualizer"]
+
 [package]
 name = "deltaflow"
 version = "0.4.0"

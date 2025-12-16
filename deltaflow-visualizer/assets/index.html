@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Deltaflow Visualizer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: system-ui, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            overflow: hidden;
+        }
+        #canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">Loading pipelines...</div>
+    <canvas id="canvas"></canvas>
+    <script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const loadingEl = document.getElementById('loading');
+
+// Layout constants
+const STEP_WIDTH = 120;
+const STEP_HEIGHT = 40;
+const STEP_GAP = 60;
+const PIPELINE_GAP = 80;
+const PADDING = 40;
+
+// State
+let graph = null;
+let pipelinePositions = new Map(); // pipeline name -> {x, y, width}
+let offset = { x: 0, y: 0 };
+let isDragging = false;
+let dragStart = { x: 0, y: 0 };
+
+// Resize canvas to window
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    render();
+}
+window.addEventListener('resize', resize);
+
+// Pan with mouse drag
+canvas.addEventListener('mousedown', e => {
+    isDragging = true;
+    dragStart = { x: e.clientX - offset.x, y: e.clientY - offset.y };
+});
+canvas.addEventListener('mousemove', e => {
+    if (isDragging) {
+        offset.x = e.clientX - dragStart.x;
+        offset.y = e.clientY - dragStart.y;
+        render();
+    }
+});
+canvas.addEventListener('mouseup', () => isDragging = false);
+canvas.addEventListener('mouseleave', () => isDragging = false);
+
+// Layout pipelines
+function layout(data) {
+    // Topological sort: find roots (no incoming connections)
+    const incoming = new Map();
+    data.pipelines.forEach(p => incoming.set(p.name, 0));
+    data.connections.forEach(c => {
+        incoming.set(c.to, (incoming.get(c.to) || 0) + 1);
+    });
+
+    // Sort: roots first, then by name
+    const sorted = [...data.pipelines].sort((a, b) => {
+        const aIn = incoming.get(a.name) || 0;
+        const bIn = incoming.get(b.name) || 0;
+        if (aIn !== bIn) return aIn - bIn;
+        return a.name.localeCompare(b.name);
+    });
+
+    // Position pipelines
+    let y = PADDING;
+    sorted.forEach(pipeline => {
+        const width = pipeline.steps.length * (STEP_WIDTH + STEP_GAP) - STEP_GAP;
+        pipelinePositions.set(pipeline.name, { x: PADDING, y, width });
+        y += STEP_HEIGHT + PIPELINE_GAP;
+    });
+}
+
+// Render
+function render() {
+    if (!graph) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.translate(offset.x, offset.y);
+
+    // Draw connections first (behind nodes)
+    ctx.strokeStyle = '#4a5568';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 4]);
+
+    graph.connections.forEach(conn => {
+        const from = pipelinePositions.get(conn.from);
+        const to = pipelinePositions.get(conn.to);
+        if (!from || !to) return;
+
+        const fromX = from.x + from.width;
+        const fromY = from.y + STEP_HEIGHT / 2;
+        const toX = to.x;
+        const toY = to.y + STEP_HEIGHT / 2;
+
+        ctx.beginPath();
+        ctx.moveTo(fromX, fromY);
+        // Curve down/up to target
+        const midY = (fromY + toY) / 2;
+        ctx.bezierCurveTo(
+            fromX + 40, fromY,
+            toX - 40, toY,
+            toX, toY
+        );
+        ctx.stroke();
+    });
+
+    ctx.setLineDash([]);
+
+    // Draw pipelines
+    graph.pipelines.forEach(pipeline => {
+        const pos = pipelinePositions.get(pipeline.name);
+        if (!pos) return;
+
+        // Pipeline label
+        ctx.fillStyle = '#718096';
+        ctx.font = '12px system-ui';
+        ctx.fillText(pipeline.name, pos.x, pos.y - 8);
+
+        // Steps
+        pipeline.steps.forEach((step, i) => {
+            const x = pos.x + i * (STEP_WIDTH + STEP_GAP);
+            const y = pos.y;
+
+            // Box
+            ctx.fillStyle = '#2d3748';
+            ctx.strokeStyle = '#4a5568';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.roundRect(x, y, STEP_WIDTH, STEP_HEIGHT, 4);
+            ctx.fill();
+            ctx.stroke();
+
+            // Step name
+            ctx.fillStyle = '#e2e8f0';
+            ctx.font = '11px system-ui';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(
+                step.name.length > 14 ? step.name.slice(0, 12) + '..' : step.name,
+                x + STEP_WIDTH / 2,
+                y + STEP_HEIGHT / 2
+            );
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'alphabetic';
+
+            // Connector to next step
+            if (i < pipeline.steps.length - 1) {
+                ctx.strokeStyle = '#4a5568';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([6, 3]);
+                ctx.beginPath();
+                ctx.moveTo(x + STEP_WIDTH, y + STEP_HEIGHT / 2);
+                ctx.lineTo(x + STEP_WIDTH + STEP_GAP, y + STEP_HEIGHT / 2);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Arrow head
+                const arrowX = x + STEP_WIDTH + STEP_GAP - 8;
+                const arrowY = y + STEP_HEIGHT / 2;
+                ctx.fillStyle = '#4a5568';
+                ctx.beginPath();
+                ctx.moveTo(arrowX, arrowY - 4);
+                ctx.lineTo(arrowX + 8, arrowY);
+                ctx.lineTo(arrowX, arrowY + 4);
+                ctx.closePath();
+                ctx.fill();
+            }
+        });
+    });
+
+    ctx.restore();
+}
+
+// Load and render
+fetch('/api/graph')
+    .then(r => r.json())
+    .then(data => {
+        loadingEl.style.display = 'none';
+        graph = data;
+        layout(data);
+        resize();
+    })
+    .catch(err => {
+        loadingEl.textContent = 'Error loading graph: ' + err.message;
+    });
+    </script>
+</body>
+</html>

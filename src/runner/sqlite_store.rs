@@ -86,7 +86,8 @@ impl TaskStore for SqliteTaskStore {
     async fn claim(&self, limit: usize) -> Result<Vec<StoredTask>, TaskError> {
         // SQLite doesn't support UPDATE ... LIMIT with RETURNING directly,
         // so we do it in two steps within a transaction
-        let mut tx = self.pool
+        let mut tx = self
+            .pool
             .begin()
             .await
             .map_err(|e| TaskError::StorageError(e.to_string()))?;
@@ -153,9 +154,10 @@ impl TaskStore for SqliteTaskStore {
             .map(|(id, pipeline, input, created_at)| {
                 let input_value: serde_json::Value = serde_json::from_str(&input)
                     .map_err(|e| TaskError::DeserializationError(e.to_string()))?;
-                let created = DateTime::parse_from_rfc3339(&format!("{}Z", created_at.replace(' ', "T")))
-                    .map(|dt| dt.with_timezone(&Utc))
-                    .unwrap_or_else(|_| Utc::now());
+                let created =
+                    DateTime::parse_from_rfc3339(&format!("{}Z", created_at.replace(' ', "T")))
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .unwrap_or_else(|_| Utc::now());
                 Ok(StoredTask {
                     id: TaskId(id),
                     pipeline,
@@ -168,8 +170,13 @@ impl TaskStore for SqliteTaskStore {
         Ok(tasks)
     }
 
-    async fn claim_for_pipeline(&self, pipeline: &str, limit: usize) -> Result<Vec<StoredTask>, TaskError> {
-        let mut tx = self.pool
+    async fn claim_for_pipeline(
+        &self,
+        pipeline: &str,
+        limit: usize,
+    ) -> Result<Vec<StoredTask>, TaskError> {
+        let mut tx = self
+            .pool
             .begin()
             .await
             .map_err(|e| TaskError::StorageError(e.to_string()))?;
@@ -237,9 +244,10 @@ impl TaskStore for SqliteTaskStore {
             .map(|(id, pipeline, input, created_at)| {
                 let input_value: serde_json::Value = serde_json::from_str(&input)
                     .map_err(|e| TaskError::DeserializationError(e.to_string()))?;
-                let created = DateTime::parse_from_rfc3339(&format!("{}Z", created_at.replace(' ', "T")))
-                    .map(|dt| dt.with_timezone(&Utc))
-                    .unwrap_or_else(|_| Utc::now());
+                let created =
+                    DateTime::parse_from_rfc3339(&format!("{}Z", created_at.replace(' ', "T")))
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .unwrap_or_else(|_| Utc::now());
                 Ok(StoredTask {
                     id: TaskId(id),
                     pipeline,
@@ -267,18 +275,24 @@ impl TaskStore for SqliteTaskStore {
         Ok(result.rows_affected() as usize)
     }
 
-    async fn claim_excluding(&self, limit: usize, exclude_pipelines: &[&str]) -> Result<Vec<StoredTask>, TaskError> {
+    async fn claim_excluding(
+        &self,
+        limit: usize,
+        exclude_pipelines: &[&str],
+    ) -> Result<Vec<StoredTask>, TaskError> {
         if exclude_pipelines.is_empty() {
             return self.claim(limit).await;
         }
 
-        let mut tx = self.pool
+        let mut tx = self
+            .pool
             .begin()
             .await
             .map_err(|e| TaskError::StorageError(e.to_string()))?;
 
         // Build NOT IN clause for excluded pipelines
-        let exclude_placeholders: Vec<String> = exclude_pipelines.iter().map(|_| "?".to_string()).collect();
+        let exclude_placeholders: Vec<String> =
+            exclude_pipelines.iter().map(|_| "?".to_string()).collect();
         let exclude_clause = exclude_placeholders.join(",");
 
         let select_query = format!(
@@ -350,9 +364,10 @@ impl TaskStore for SqliteTaskStore {
             .map(|(id, pipeline, input, created_at)| {
                 let input_value: serde_json::Value = serde_json::from_str(&input)
                     .map_err(|e| TaskError::DeserializationError(e.to_string()))?;
-                let created = DateTime::parse_from_rfc3339(&format!("{}Z", created_at.replace(' ', "T")))
-                    .map(|dt| dt.with_timezone(&Utc))
-                    .unwrap_or_else(|_| Utc::now());
+                let created =
+                    DateTime::parse_from_rfc3339(&format!("{}Z", created_at.replace(' ', "T")))
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .unwrap_or_else(|_| Utc::now());
                 Ok(StoredTask {
                     id: TaskId(id),
                     pipeline,

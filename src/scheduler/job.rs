@@ -7,9 +7,8 @@ use tokio::time::interval;
 use tracing::{debug, error, info};
 
 /// Type-erased query function that returns JSON values.
-pub(crate) type QueryFn = Arc<
-    dyn Fn() -> Pin<Box<dyn Future<Output = Vec<serde_json::Value>> + Send>> + Send + Sync,
->;
+pub(crate) type QueryFn =
+    Arc<dyn Fn() -> Pin<Box<dyn Future<Output = Vec<serde_json::Value>> + Send>> + Send + Sync>;
 
 /// A registered job configuration.
 pub(crate) struct RegisteredJob {
@@ -94,11 +93,7 @@ impl<S: TaskStore + 'static> PeriodicScheduler<S> {
         }
     }
 
-    async fn execute_job(
-        task_store: &Arc<S>,
-        pipeline_name: &'static str,
-        query_fn: &QueryFn,
-    ) {
+    async fn execute_job(task_store: &Arc<S>, pipeline_name: &'static str, query_fn: &QueryFn) {
         debug!(pipeline = pipeline_name, "Executing scheduled job query");
 
         let items = query_fn().await;

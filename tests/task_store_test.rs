@@ -89,9 +89,18 @@ async fn test_claim_respects_limit() {
 async fn test_claim_fifo_order() {
     let store = setup_store().await;
 
-    let id1 = store.enqueue("p", serde_json::json!({"n": 1})).await.unwrap();
-    let id2 = store.enqueue("p", serde_json::json!({"n": 2})).await.unwrap();
-    let id3 = store.enqueue("p", serde_json::json!({"n": 3})).await.unwrap();
+    let id1 = store
+        .enqueue("p", serde_json::json!({"n": 1}))
+        .await
+        .unwrap();
+    let id2 = store
+        .enqueue("p", serde_json::json!({"n": 2}))
+        .await
+        .unwrap();
+    let id3 = store
+        .enqueue("p", serde_json::json!({"n": 3}))
+        .await
+        .unwrap();
 
     let tasks = store.claim(2).await.unwrap();
     assert_eq!(tasks.len(), 2);
@@ -107,10 +116,22 @@ async fn test_claim_for_pipeline() {
     let store = setup_store().await;
 
     // Enqueue tasks for different pipelines
-    store.enqueue("pipeline_a", serde_json::json!({"n": 1})).await.unwrap();
-    store.enqueue("pipeline_b", serde_json::json!({"n": 2})).await.unwrap();
-    store.enqueue("pipeline_a", serde_json::json!({"n": 3})).await.unwrap();
-    store.enqueue("pipeline_b", serde_json::json!({"n": 4})).await.unwrap();
+    store
+        .enqueue("pipeline_a", serde_json::json!({"n": 1}))
+        .await
+        .unwrap();
+    store
+        .enqueue("pipeline_b", serde_json::json!({"n": 2}))
+        .await
+        .unwrap();
+    store
+        .enqueue("pipeline_a", serde_json::json!({"n": 3}))
+        .await
+        .unwrap();
+    store
+        .enqueue("pipeline_b", serde_json::json!({"n": 4}))
+        .await
+        .unwrap();
 
     // Claim only pipeline_a tasks
     let tasks = store.claim_for_pipeline("pipeline_a", 10).await.unwrap();
