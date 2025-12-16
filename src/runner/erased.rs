@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use crate::pipeline::{BuiltPipeline, HasEntityId, StepChain};
+use crate::pipeline::{BuiltPipeline, HasEntityId, PipelineGraph, StepChain};
 use super::store::TaskError;
 
 /// Type-erased pipeline that can be stored in a registry.
@@ -12,6 +12,9 @@ use super::store::TaskError;
 pub trait ErasedPipeline: Send + Sync {
     /// Get the pipeline name.
     fn name(&self) -> &'static str;
+
+    /// Get the pipeline graph for visualization.
+    fn to_graph(&self) -> PipelineGraph;
 
     /// Run the pipeline with JSON input, return spawned work.
     async fn run_erased(
@@ -36,6 +39,10 @@ where
 {
     fn name(&self) -> &'static str {
         BuiltPipeline::name(self)
+    }
+
+    fn to_graph(&self) -> PipelineGraph {
+        BuiltPipeline::to_graph(self)
     }
 
     async fn run_erased(
