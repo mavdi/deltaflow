@@ -1,5 +1,5 @@
 [package]
-name = "deltaflow-visualizer"
+name = "deltaflow-harness"
 version = "0.1.0"
 edition = "2021"
 description = "Web-based pipeline visualization for Deltaflow"

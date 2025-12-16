@@ -15,7 +15,7 @@
 //!
 //! ```no_run
 //! use deltaflow::{Pipeline, Step, StepError, RunnerBuilder, SqliteTaskStore, HasEntityId};
-//! use deltaflow_visualizer::RunnerVisualizerExt;
+//! use deltaflow_harness::RunnerVisualizerExt;
 //! use async_trait::async_trait;
 //! use serde::{Deserialize, Serialize};
 //!

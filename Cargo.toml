@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "deltaflow-visualizer"]
+members = [".", "deltaflow-harness"]
 
 [package]
 name = "deltaflow"

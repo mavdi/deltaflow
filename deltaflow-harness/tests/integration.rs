@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use deltaflow::{
     HasEntityId, NoopRecorder, Pipeline, RunnerBuilder, SqliteTaskStore, Step, StepError,
 };
-use deltaflow_visualizer::RunnerVisualizerExt;
+use deltaflow_harness::RunnerVisualizerExt;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Serialize, Deserialize)]
