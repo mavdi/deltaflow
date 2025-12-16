@@ -6,7 +6,7 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: system-ui, sans-serif;
+            font-family: 'JetBrainsMono Nerd Font', 'FiraCode Nerd Font', 'Hack Nerd Font', monospace;
             background: #000000;
             color: #ffffff;
             overflow: hidden;
@@ -147,7 +147,7 @@ function render() {
 
         // Pipeline label
         ctx.fillStyle = COLOR_LABEL;
-        ctx.font = '12px system-ui';
+        ctx.font = '12px "JetBrainsMono Nerd Font", monospace';
         ctx.fillText(pipeline.name, pos.x, pos.y - 8);
 
         // Steps
@@ -160,13 +160,13 @@ function render() {
             ctx.strokeStyle = COLOR_BORDER;
             ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.roundRect(x, y, STEP_WIDTH, STEP_HEIGHT, 4);
+            ctx.rect(x, y, STEP_WIDTH, STEP_HEIGHT);
             ctx.fill();
             ctx.stroke();
 
             // Step name
             ctx.fillStyle = COLOR_TEXT;
-            ctx.font = '11px system-ui';
+            ctx.font = '11px "JetBrainsMono Nerd Font", monospace';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(
