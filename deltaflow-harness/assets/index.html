@@ -38,6 +38,7 @@ const STEP_HEIGHT = 40;
 const STEP_GAP = 60;
 const PIPELINE_GAP = 80;
 const PADDING = 40;
+const COLUMN_GAP = 250;
 
 // Color constants
 const COLOR_BG = '#000000';
@@ -49,7 +50,7 @@ const COLOR_FORK = '#ffffff';
 
 // State
 let graph = null;
-let pipelinePositions = new Map(); // pipeline name -> {x, y, width}
+let pipelinePositions = new Map(); // pipeline name -> {x, y, width, column}
 let offset = { x: 0, y: 0 };
 let isDragging = false;
 let dragStart = { x: 0, y: 0 };
@@ -77,30 +78,115 @@ canvas.addEventListener('mousemove', e => {
 canvas.addEventListener('mouseup', () => isDragging = false);
 canvas.addEventListener('mouseleave', () => isDragging = false);
 
-// Layout pipelines
+// Layout pipelines using column-based algorithm
 function layout(data) {
-    // Topological sort: find roots (no incoming connections)
-    const incoming = new Map();
-    data.pipelines.forEach(p => incoming.set(p.name, 0));
+    // Build adjacency: who points to whom
+    const outgoing = new Map(); // pipeline -> [targets]
+    const incoming = new Map(); // pipeline -> [sources]
+
+    data.pipelines.forEach(p => {
+        outgoing.set(p.name, []);
+        incoming.set(p.name, []);
+    });
+
     data.connections.forEach(c => {
-        incoming.set(c.to, (incoming.get(c.to) || 0) + 1);
+        outgoing.get(c.from)?.push(c.to);
+        incoming.get(c.to)?.push(c.from);
     });
 
-    // Sort: roots first, then by name
-    const sorted = [...data.pipelines].sort((a, b) => {
-        const aIn = incoming.get(a.name) || 0;
-        const bIn = incoming.get(b.name) || 0;
-        if (aIn !== bIn) return aIn - bIn;
-        return a.name.localeCompare(b.name);
+    // Detect cycles using DFS, mark back-edges
+    const visited = new Set();
+    const inStack = new Set();
+    const backEdges = new Set(); // "from->to" strings
+
+    function detectCycles(node) {
+        if (inStack.has(node)) return; // cycle detected
+        if (visited.has(node)) return;
+
+        visited.add(node);
+        inStack.add(node);
+
+        for (const target of outgoing.get(node) || []) {
+            if (inStack.has(target)) {
+                backEdges.add(`${node}->${target}`);
+            } else {
+                detectCycles(target);
+            }
+        }
+
+        inStack.delete(node);
+    }
+
+    data.pipelines.forEach(p => detectCycles(p.name));
+
+    // Compute columns: column[p] = max(column[sources] + 1), roots = 0
+    const column = new Map();
+    const remaining = new Set(data.pipelines.map(p => p.name));
+
+    // Initialize roots (no incoming or only back-edges incoming)
+    data.pipelines.forEach(p => {
+        const sources = incoming.get(p.name) || [];
+        const realSources = sources.filter(s => !backEdges.has(`${s}->${p.name}`));
+        if (realSources.length === 0) {
+            column.set(p.name, 0);
+            remaining.delete(p.name);
+        }
     });
 
-    // Position pipelines
-    let y = PADDING;
-    sorted.forEach(pipeline => {
-        const width = pipeline.steps.length * (STEP_WIDTH + STEP_GAP) - STEP_GAP;
-        pipelinePositions.set(pipeline.name, { x: PADDING, y, width });
-        y += STEP_HEIGHT + PIPELINE_GAP;
-    });
+    // Iteratively assign columns
+    let maxIter = data.pipelines.length;
+    while (remaining.size > 0 && maxIter-- > 0) {
+        for (const name of remaining) {
+            const sources = incoming.get(name) || [];
+            const realSources = sources.filter(s => !backEdges.has(`${s}->${name}`));
+
+            // Check if all real sources have columns assigned
+            if (realSources.every(s => column.has(s))) {
+                const maxSourceCol = Math.max(0, ...realSources.map(s => column.get(s)));
+                column.set(name, maxSourceCol + 1);
+                remaining.delete(name);
+            }
+        }
+    }
+
+    // Group pipelines by column
+    const columns = new Map(); // column index -> [pipeline names]
+    for (const [name, col] of column) {
+        if (!columns.has(col)) columns.set(col, []);
+        columns.get(col).push(name);
+    }
+
+    // Position pipelines column by column
+    const maxCols = columns.size > 0 ? Math.max(...columns.keys()) + 1 : 0;
+
+    for (let col = 0; col < maxCols; col++) {
+        const names = columns.get(col) || [];
+
+        // Sort within column (can now use parent Y because col-1 is already positioned)
+        if (col === 0) {
+            names.sort();
+        } else {
+            names.sort((a, b) => {
+                const aParents = (incoming.get(a) || []).filter(s => !backEdges.has(`${s}->${a}`));
+                const bParents = (incoming.get(b) || []).filter(s => !backEdges.has(`${s}->${b}`));
+                const aParentY = aParents.length > 0 && pipelinePositions.has(aParents[0])
+                    ? pipelinePositions.get(aParents[0]).y : 0;
+                const bParentY = bParents.length > 0 && pipelinePositions.has(bParents[0])
+                    ? pipelinePositions.get(bParents[0]).y : 0;
+                return aParentY - bParentY;
+            });
+        }
+
+        // Position this column
+        let y = PADDING;
+        for (const name of names) {
+            const pipeline = data.pipelines.find(p => p.name === name);
+            const width = pipeline.steps.length * (STEP_WIDTH + STEP_GAP) - STEP_GAP;
+            const x = PADDING + col * COLUMN_GAP;
+            pipelinePositions.set(name, { x, y, width, column: col });
+            y += STEP_HEIGHT + PIPELINE_GAP;
+        }
+    }
 }
 
 // Render
