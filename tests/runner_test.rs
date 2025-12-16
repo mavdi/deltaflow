@@ -2,8 +2,7 @@
 
 use async_trait::async_trait;
 use deltaflow::{
-    HasEntityId, NoopRecorder, Pipeline, RunnerBuilder,
-    SqliteTaskStore, Step, StepError,
+    HasEntityId, NoopRecorder, Pipeline, RunnerBuilder, SqliteTaskStore, Step, StepError,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
@@ -129,14 +128,18 @@ async fn test_runner_spawns_followup_tasks() {
         .start_with(ExtractTickers)
         .with_recorder(NoopRecorder)
         .spawn_from("fetch_price", |output: &VideoOutput| {
-            output.tickers.iter()
+            output
+                .tickers
+                .iter()
                 .map(|t| PriceRequest { ticker: t.clone() })
                 .collect()
         })
         .build();
 
     let price_pipeline = Pipeline::new("fetch_price")
-        .start_with(FetchPriceStep { fetched: fetched_clone })
+        .start_with(FetchPriceStep {
+            fetched: fetched_clone,
+        })
         .with_recorder(NoopRecorder)
         .build();
 

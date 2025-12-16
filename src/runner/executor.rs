@@ -61,7 +61,11 @@ impl<S: TaskStore + 'static> Runner<S> {
                 let excluded: Vec<&str> = self.pipeline_semaphores.keys().copied().collect();
 
                 // Claim tasks, excluding pipelines with custom concurrency
-                if let Ok(tasks) = self.store.claim_excluding(global_available, &excluded).await {
+                if let Ok(tasks) = self
+                    .store
+                    .claim_excluding(global_available, &excluded)
+                    .await
+                {
                     for task in tasks {
                         // Acquire global permit for each task
                         if let Ok(permit) = global_semaphore.clone().try_acquire_owned() {
@@ -155,7 +159,10 @@ impl<S: TaskStore + 'static> RunnerBuilder<S> {
         pipeline: impl ErasedPipeline + 'static,
         max_concurrent: usize,
     ) -> Self {
-        assert!(max_concurrent > 0, "pipeline concurrency must be at least 1");
+        assert!(
+            max_concurrent > 0,
+            "pipeline concurrency must be at least 1"
+        );
         let name = pipeline.name();
         self.pipeline_concurrency.insert(name, max_concurrent);
         self.pipelines.insert(name, Arc::new(pipeline));
@@ -176,10 +183,7 @@ impl<S: TaskStore + 'static> RunnerBuilder<S> {
 
     /// Get graphs from all registered pipelines (for visualization).
     pub fn get_pipeline_graphs(&self) -> Vec<crate::pipeline::PipelineGraph> {
-        self.pipelines
-            .values()
-            .map(|p| p.to_graph())
-            .collect()
+        self.pipelines.values().map(|p| p.to_graph()).collect()
     }
 
     /// Build the runner.

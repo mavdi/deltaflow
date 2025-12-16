@@ -1,10 +1,10 @@
 //! HTTP server for the visualizer.
 
 use axum::{
-    Router,
-    routing::get,
-    response::{Html, Json},
     extract::State,
+    response::{Html, Json},
+    routing::get,
+    Router,
 };
 use std::sync::Arc;
 
@@ -27,9 +27,7 @@ async fn serve_index() -> Html<&'static str> {
     Html(include_str!("../assets/index.html"))
 }
 
-async fn serve_graph(
-    State(state): State<Arc<VisualizerState>>,
-) -> Json<GraphResponse> {
+async fn serve_graph(State(state): State<Arc<VisualizerState>>) -> Json<GraphResponse> {
     Json(state.graph.clone())
 }
 

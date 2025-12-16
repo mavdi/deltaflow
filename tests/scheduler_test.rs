@@ -32,9 +32,7 @@ async fn test_scheduler_enqueues_items() {
         .build();
 
     // Run scheduler in background
-    let handle = tokio::spawn(async move {
-        scheduler.run().await
-    });
+    let handle = tokio::spawn(async move { scheduler.run().await });
 
     // Wait for at least one execution
     tokio::time::sleep(Duration::from_millis(100)).await;
@@ -66,12 +64,10 @@ async fn test_scheduler_run_on_start_false() {
                 vec!["item".to_string()]
             }
         })
-        .run_on_start(false)  // Don't run immediately
+        .run_on_start(false) // Don't run immediately
         .build();
 
-    let handle = tokio::spawn(async move {
-        scheduler.run().await
-    });
+    let handle = tokio::spawn(async move { scheduler.run().await });
 
     // Wait briefly
     tokio::time::sleep(Duration::from_millis(100)).await;
@@ -88,14 +84,12 @@ async fn test_scheduler_empty_query_result() {
 
     let scheduler = SchedulerBuilder::new(task_store)
         .job("test_pipeline", Duration::from_millis(50), || async {
-            Vec::<String>::new()  // Return empty
+            Vec::<String>::new() // Return empty
         })
         .run_on_start(true)
         .build();
 
-    let handle = tokio::spawn(async move {
-        scheduler.run().await
-    });
+    let handle = tokio::spawn(async move { scheduler.run().await });
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
@@ -135,9 +129,7 @@ async fn test_scheduler_multiple_jobs() {
         .run_on_start(true)
         .build();
 
-    let handle = tokio::spawn(async move {
-        scheduler.run().await
-    });
+    let handle = tokio::spawn(async move { scheduler.run().await });
 
     tokio::time::sleep(Duration::from_millis(150)).await;
 
@@ -148,8 +140,14 @@ async fn test_scheduler_multiple_jobs() {
     // Both pipelines should have tasks
     let verify_store = SqliteTaskStore::new(pool);
     let tasks = verify_store.claim(20).await.unwrap();
-    let pipeline_a_tasks: Vec<_> = tasks.iter().filter(|t| t.pipeline == "pipeline_a").collect();
-    let pipeline_b_tasks: Vec<_> = tasks.iter().filter(|t| t.pipeline == "pipeline_b").collect();
+    let pipeline_a_tasks: Vec<_> = tasks
+        .iter()
+        .filter(|t| t.pipeline == "pipeline_a")
+        .collect();
+    let pipeline_b_tasks: Vec<_> = tasks
+        .iter()
+        .filter(|t| t.pipeline == "pipeline_b")
+        .collect();
 
     assert!(!pipeline_a_tasks.is_empty());
     assert!(!pipeline_b_tasks.is_empty());

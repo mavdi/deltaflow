@@ -39,8 +39,8 @@ pub mod retry;
 pub mod step;
 
 pub use pipeline::{
-    BuiltPipeline, DynamicSpawnNode, FanOutNode, ForkNode, HasEntityId, Pipeline,
-    PipelineError, PipelineGraph, SpawnRule, StepNode,
+    BuiltPipeline, DynamicSpawnNode, FanOutNode, ForkNode, HasEntityId, Pipeline, PipelineError,
+    PipelineGraph, SpawnRule, StepNode,
 };
 pub use recorder::{NoopRecorder, Recorder, RunId, RunStatus, StepId, StepStatus};
 pub use retry::RetryPolicy;
@@ -60,7 +60,7 @@ pub use sqlite::SqliteRecorder;
 
 #[cfg(feature = "sqlite")]
 pub use runner::{
-    ErasedPipeline, Runner, RunnerBuilder, SqliteTaskStore, SpawnedTask, StoredTask, TaskError,
+    ErasedPipeline, Runner, RunnerBuilder, SpawnedTask, SqliteTaskStore, StoredTask, TaskError,
     TaskId, TaskStore,
 };
 

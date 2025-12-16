@@ -5,7 +5,7 @@ use std::sync::Arc;
 use deltaflow::{PipelineGraph, RunnerBuilder, TaskStore};
 
 use crate::graph::GraphResponse;
-use crate::server::{VisualizerState, run_server};
+use crate::server::{run_server, VisualizerState};
 
 /// Extension trait that adds visualization to RunnerBuilder.
 pub trait RunnerVisualizerExt<S: TaskStore + 'static>: Sized {

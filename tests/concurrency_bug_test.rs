@@ -6,8 +6,7 @@
 
 use async_trait::async_trait;
 use deltaflow::{
-    HasEntityId, NoopRecorder, Pipeline, RunnerBuilder,
-    SqliteTaskStore, Step, StepError, TaskStore,
+    HasEntityId, NoopRecorder, Pipeline, RunnerBuilder, SqliteTaskStore, Step, StepError, TaskStore,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
@@ -99,7 +98,12 @@ async fn test_pipeline_concurrency_limit_enforced() {
     // Submit 10 tasks
     for i in 0..10 {
         runner
-            .submit("slow_pipeline", SlowInput { id: format!("task_{}", i) })
+            .submit(
+                "slow_pipeline",
+                SlowInput {
+                    id: format!("task_{}", i),
+                },
+            )
             .await
             .unwrap();
     }
@@ -152,7 +156,12 @@ async fn test_database_running_count_respects_concurrency() {
     // Submit many tasks
     for i in 0..20 {
         runner
-            .submit("limited_pipeline", SlowInput { id: format!("task_{}", i) })
+            .submit(
+                "limited_pipeline",
+                SlowInput {
+                    id: format!("task_{}", i),
+                },
+            )
             .await
             .unwrap();
     }
@@ -221,20 +230,18 @@ async fn test_orphan_tasks_recovered_on_startup() {
         .unwrap();
 
     // Verify setup: 1 running, 1 pending
-    let running_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM delta_tasks WHERE status = 'running'"
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let running_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM delta_tasks WHERE status = 'running'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(running_count, 1, "Setup: should have 1 running task");
 
-    let pending_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM delta_tasks WHERE status = 'pending'"
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let pending_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM delta_tasks WHERE status = 'pending'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(pending_count, 1, "Setup: should have 1 pending task");
 
     // Recover orphans (simulating runner startup)

@@ -1,7 +1,9 @@
 //! Tests for fork and fan-out functionality.
 
 use async_trait::async_trait;
-use deltaflow::{HasEntityId, NoopRecorder, Pipeline, RunnerBuilder, SqliteTaskStore, Step, StepError};
+use deltaflow::{
+    HasEntityId, NoopRecorder, Pipeline, RunnerBuilder, SqliteTaskStore, Step, StepError,
+};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::sync::Arc;
@@ -47,7 +49,10 @@ impl Step for NormalizeStep {
 async fn test_fork_when_predicate_matches() {
     let pipeline = Pipeline::new("market_data")
         .start_with(NormalizeStep)
-        .fork_when(|d: &MarketData| d.asset_class == "crypto", "crypto_pipeline")
+        .fork_when(
+            |d: &MarketData| d.asset_class == "crypto",
+            "crypto_pipeline",
+        )
         .with_recorder(NoopRecorder)
         .build();
 
@@ -68,7 +73,10 @@ async fn test_fork_when_predicate_matches() {
 async fn test_fork_when_predicate_does_not_match() {
     let pipeline = Pipeline::new("market_data")
         .start_with(NormalizeStep)
-        .fork_when(|d: &MarketData| d.asset_class == "crypto", "crypto_pipeline")
+        .fork_when(
+            |d: &MarketData| d.asset_class == "crypto",
+            "crypto_pipeline",
+        )
         .with_recorder(NoopRecorder)
         .build();
 
@@ -113,9 +121,15 @@ async fn test_fan_out_spawns_to_all_targets() {
 async fn test_multiple_forks_all_matching_fire() {
     let pipeline = Pipeline::new("market_data")
         .start_with(NormalizeStep)
-        .fork_when(|d: &MarketData| d.asset_class == "crypto", "crypto_pipeline")
+        .fork_when(
+            |d: &MarketData| d.asset_class == "crypto",
+            "crypto_pipeline",
+        )
         .fork_when(|d: &MarketData| d.price > 10000.0, "high_value_pipeline")
-        .fork_when(|d: &MarketData| d.symbol.len() <= 4, "short_symbol_pipeline")
+        .fork_when(
+            |d: &MarketData| d.symbol.len() <= 4,
+            "short_symbol_pipeline",
+        )
         .with_recorder(NoopRecorder)
         .build();
 
@@ -141,7 +155,10 @@ async fn test_multiple_forks_all_matching_fire() {
 async fn test_combined_fork_fanout_spawn_from() {
     let pipeline = Pipeline::new("market_data")
         .start_with(NormalizeStep)
-        .fork_when(|d: &MarketData| d.asset_class == "crypto", "crypto_pipeline")
+        .fork_when(
+            |d: &MarketData| d.asset_class == "crypto",
+            "crypto_pipeline",
+        )
         .fan_out(&["audit_pipeline"])
         .spawn_from("alert_pipeline", |d: &MarketData| {
             if d.price > 40000.0 {
@@ -178,7 +195,10 @@ async fn test_combined_fork_fanout_spawn_from() {
 async fn test_to_graph_exports_structure() {
     let pipeline = Pipeline::new("market_data")
         .start_with(NormalizeStep)
-        .fork_when(|d: &MarketData| d.asset_class == "crypto", "crypto_pipeline")
+        .fork_when(
+            |d: &MarketData| d.asset_class == "crypto",
+            "crypto_pipeline",
+        )
         .fan_out(&["ml_pipeline", "stats_pipeline"])
         .with_recorder(NoopRecorder)
         .build();
@@ -193,14 +213,20 @@ async fn test_to_graph_exports_structure() {
     assert_eq!(graph.forks[0].target_pipeline, "crypto_pipeline");
 
     assert_eq!(graph.fan_outs.len(), 1);
-    assert_eq!(graph.fan_outs[0].targets, vec!["ml_pipeline", "stats_pipeline"]);
+    assert_eq!(
+        graph.fan_outs[0].targets,
+        vec!["ml_pipeline", "stats_pipeline"]
+    );
 }
 
 #[tokio::test]
 async fn test_graph_serializes_to_json() {
     let pipeline = Pipeline::new("market_data")
         .start_with(NormalizeStep)
-        .fork_when(|d: &MarketData| d.asset_class == "crypto", "crypto_pipeline")
+        .fork_when(
+            |d: &MarketData| d.asset_class == "crypto",
+            "crypto_pipeline",
+        )
         .fan_out(&["ml_pipeline"])
         .with_recorder(NoopRecorder)
         .build();
@@ -280,7 +306,10 @@ async fn test_runner_executes_forked_tasks() {
 
     let main_pipeline = Pipeline::new("market_data")
         .start_with(NormalizeStep)
-        .fork_when(|d: &MarketData| d.asset_class == "crypto", "crypto_pipeline")
+        .fork_when(
+            |d: &MarketData| d.asset_class == "crypto",
+            "crypto_pipeline",
+        )
         .with_recorder(NoopRecorder)
         .build();
 
@@ -351,7 +380,10 @@ impl Step for RecordingStep {
     }
 
     async fn execute(&self, input: Self::Input) -> Result<Self::Output, StepError> {
-        self.recorded.lock().await.push(format!("{}:{}", self.name, input.symbol));
+        self.recorded
+            .lock()
+            .await
+            .push(format!("{}:{}", self.name, input.symbol));
         Ok(input)
     }
 }
@@ -454,12 +486,13 @@ async fn test_fork_to_unknown_pipeline_fails_gracefully() {
     }
 
     // The spawned task to nonexistent_pipeline should be failed
-    let failed_tasks: Vec<(String, String)> = sqlx::query_as(
-        "SELECT pipeline, status FROM delta_tasks WHERE status = 'failed'"
-    )
-    .fetch_all(&pool_clone)
-    .await
-    .unwrap();
+    let failed_tasks: Vec<(String, String)> =
+        sqlx::query_as("SELECT pipeline, status FROM delta_tasks WHERE status = 'failed'")
+            .fetch_all(&pool_clone)
+            .await
+            .unwrap();
 
-    assert!(failed_tasks.iter().any(|(p, _)| p == "nonexistent_pipeline"));
+    assert!(failed_tasks
+        .iter()
+        .any(|(p, _)| p == "nonexistent_pipeline"));
 }

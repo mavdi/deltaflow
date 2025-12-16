@@ -27,7 +27,12 @@ impl<S: TaskStore + 'static> SchedulerBuilder<S> {
     /// The query function is called at each interval and should return
     /// items to enqueue. Each item is serialized to JSON and submitted
     /// to the named pipeline.
-    pub fn job<F, Fut, T>(mut self, pipeline_name: &'static str, interval: Duration, query_fn: F) -> Self
+    pub fn job<F, Fut, T>(
+        mut self,
+        pipeline_name: &'static str,
+        interval: Duration,
+        query_fn: F,
+    ) -> Self
     where
         F: Fn() -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Vec<T>> + Send + 'static,

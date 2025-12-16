@@ -84,7 +84,10 @@ mod tests {
         let graphs = vec![
             PipelineGraph {
                 name: "pipeline_a".to_string(),
-                steps: vec![StepNode { name: "Step1".to_string(), index: 0 }],
+                steps: vec![StepNode {
+                    name: "Step1".to_string(),
+                    index: 0,
+                }],
                 forks: vec![ForkNode {
                     target_pipeline: "pipeline_b".to_string(),
                     condition: "always".to_string(),
@@ -94,7 +97,10 @@ mod tests {
             },
             PipelineGraph {
                 name: "pipeline_b".to_string(),
-                steps: vec![StepNode { name: "Step2".to_string(), index: 0 }],
+                steps: vec![StepNode {
+                    name: "Step2".to_string(),
+                    index: 0,
+                }],
                 forks: vec![],
                 fan_outs: vec![],
                 dynamic_spawns: vec![],
