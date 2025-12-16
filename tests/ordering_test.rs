@@ -401,3 +401,145 @@ async fn test_priority_routing() {
     assert!(standard.contains(&5), "Item 5 should go to standard");
     assert_eq!(standard.len(), 3, "Only normal priority items in standard");
 }
+
+struct BatchPassthroughStep;
+
+#[async_trait]
+impl Step for BatchPassthroughStep {
+    type Input = BatchedItem;
+    type Output = BatchedItem;
+
+    fn name(&self) -> &'static str {
+        "batch_passthrough"
+    }
+
+    async fn execute(&self, input: Self::Input) -> Result<Self::Output, StepError> {
+        Ok(input)
+    }
+}
+
+struct BatchRecordingStep {
+    name: &'static str,
+    recorded: Arc<Mutex<Vec<(u64, String)>>>,
+}
+
+#[async_trait]
+impl Step for BatchRecordingStep {
+    type Input = BatchedItem;
+    type Output = BatchedItem;
+
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
+    async fn execute(&self, input: Self::Input) -> Result<Self::Output, StepError> {
+        self.recorded.lock().await.push((input.id, input.batch_id.clone()));
+        Ok(input)
+    }
+}
+
+#[tokio::test]
+async fn test_batch_boundary_routing() {
+    // Demonstrates: routing decision based on batch_id, all items in same batch go same route
+    let pool = SqlitePool::connect(":memory:").await.unwrap();
+    let store = SqliteTaskStore::new(pool);
+    store.run_migrations().await.unwrap();
+
+    let route_a_recorded = Arc::new(Mutex::new(Vec::<(u64, String)>::new()));
+    let route_b_recorded = Arc::new(Mutex::new(Vec::<(u64, String)>::new()));
+
+    // Shared state: once a batch is seen, remember its route
+    let batch_routes: Arc<Mutex<HashMap<String, &'static str>>> =
+        Arc::new(Mutex::new(HashMap::new()));
+
+    let batch_routes_a = batch_routes.clone();
+    let batch_routes_b = batch_routes.clone();
+
+    let main_pipeline = Pipeline::new("main")
+        .start_with(BatchPassthroughStep)
+        // First batch seen goes to route_a, alternating
+        .fork_when(
+            move |item: &BatchedItem| {
+                let mut routes = futures::executor::block_on(batch_routes_a.lock());
+                let current_len = routes.len();
+                let route = routes
+                    .entry(item.batch_id.clone())
+                    .or_insert_with(|| if current_len % 2 == 0 { "route_a" } else { "route_b" });
+                *route == "route_a"
+            },
+            "route_a",
+        )
+        .fork_when(
+            move |item: &BatchedItem| {
+                let routes = futures::executor::block_on(batch_routes_b.lock());
+                routes.get(&item.batch_id).map_or(false, |r| *r == "route_b")
+            },
+            "route_b",
+        )
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let route_a = Pipeline::new("route_a")
+        .start_with(BatchRecordingStep {
+            name: "route_a",
+            recorded: route_a_recorded.clone(),
+        })
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let route_b = Pipeline::new("route_b")
+        .start_with(BatchRecordingStep {
+            name: "route_b",
+            recorded: route_b_recorded.clone(),
+        })
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let runner = RunnerBuilder::new(store)
+        .pipeline(main_pipeline)
+        .pipeline(route_a)
+        .pipeline(route_b)
+        .poll_interval(Duration::from_millis(50))
+        .max_concurrent(1) // Sequential for deterministic batch assignment
+        .build();
+
+    // Items from batches A, B, A, B, A - should route consistently per batch
+    let items = vec![
+        BatchedItem { id: 1, batch_id: "batch_A".to_string() },
+        BatchedItem { id: 2, batch_id: "batch_B".to_string() },
+        BatchedItem { id: 3, batch_id: "batch_A".to_string() },
+        BatchedItem { id: 4, batch_id: "batch_B".to_string() },
+        BatchedItem { id: 5, batch_id: "batch_A".to_string() },
+    ];
+
+    for item in items {
+        runner.submit("main", item).await.unwrap();
+    }
+
+    tokio::select! {
+        _ = runner.run() => {}
+        _ = tokio::time::sleep(Duration::from_millis(1000)) => {}
+    }
+
+    let route_a = route_a_recorded.lock().await;
+    let route_b = route_b_recorded.lock().await;
+
+    // All batch_A items should go to same route
+    let batch_a_in_a: Vec<_> = route_a.iter().filter(|(_, b)| b == "batch_A").collect();
+    let batch_a_in_b: Vec<_> = route_b.iter().filter(|(_, b)| b == "batch_A").collect();
+
+    // Either all in A or all in B, not split
+    assert!(
+        batch_a_in_a.len() == 3 || batch_a_in_b.len() == 3,
+        "All batch_A items should go to same route"
+    );
+
+    // All batch_B items should go to same route
+    let batch_b_in_a: Vec<_> = route_a.iter().filter(|(_, b)| b == "batch_B").collect();
+    let batch_b_in_b: Vec<_> = route_b.iter().filter(|(_, b)| b == "batch_B").collect();
+
+    assert!(
+        batch_b_in_a.len() == 2 || batch_b_in_b.len() == 2,
+        "All batch_B items should go to same route"
+    );
+}
