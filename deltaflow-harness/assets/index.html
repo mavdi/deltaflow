@@ -113,8 +113,8 @@ function render() {
 
     // Draw connections first (behind nodes)
     ctx.strokeStyle = COLOR_FORK;
-    ctx.lineWidth = 2;
-    ctx.setLineDash([8, 4]);
+    ctx.lineWidth = 4;
+    ctx.setLineDash([]);
 
     graph.connections.forEach(conn => {
         const from = pipelinePositions.get(conn.from);
@@ -136,9 +136,18 @@ function render() {
             toX, toY
         );
         ctx.stroke();
-    });
 
-    ctx.setLineDash([]);
+        // Draw connection type label
+        const typeName = conn.type || 'fork';
+        const labelX = (fromX + toX) / 2;
+        const labelY = (fromY + toY) / 2 - 6;
+
+        ctx.fillStyle = COLOR_LABEL;
+        ctx.font = '9px "JetBrainsMono Nerd Font", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(typeName, labelX, labelY);
+        ctx.textAlign = 'left';
+    });
 
     // Draw pipelines
     graph.pipelines.forEach(pipeline => {
