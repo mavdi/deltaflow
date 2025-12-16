@@ -197,11 +197,7 @@ function render() {
     ctx.save();
     ctx.translate(offset.x, offset.y);
 
-    // Draw connections first (behind nodes)
-    ctx.strokeStyle = COLOR_FORK;
-    ctx.lineWidth = 4;
-    ctx.setLineDash([]);
-
+    // Draw connections
     graph.connections.forEach(conn => {
         const from = pipelinePositions.get(conn.from);
         const to = pipelinePositions.get(conn.to);
@@ -212,26 +208,83 @@ function render() {
         const toX = to.x;
         const toY = to.y + STEP_HEIGHT / 2;
 
+        const isBackward = to.column <= from.column;
+
+        // Branch point (diamond) at source
+        const branchX = fromX + 20;
+        const branchY = fromY;
+
+        // Line from last step to branch point
+        ctx.strokeStyle = COLOR_FORK;
+        ctx.lineWidth = 4;
+        ctx.setLineDash([]);
         ctx.beginPath();
         ctx.moveTo(fromX, fromY);
-        // Curve down/up to target
-        const midY = (fromY + toY) / 2;
-        ctx.bezierCurveTo(
-            fromX + 40, fromY,
-            toX - 40, toY,
-            toX, toY
-        );
+        ctx.lineTo(branchX, branchY);
         ctx.stroke();
 
-        // Draw connection type label
-        const typeName = conn.type || 'fork';
-        const labelX = (fromX + toX) / 2;
-        const labelY = (fromY + toY) / 2 - 6;
+        // Diamond at branch point
+        ctx.fillStyle = COLOR_FORK;
+        ctx.beginPath();
+        ctx.moveTo(branchX, branchY - 8);
+        ctx.lineTo(branchX + 8, branchY);
+        ctx.lineTo(branchX, branchY + 8);
+        ctx.lineTo(branchX - 8, branchY);
+        ctx.closePath();
+        ctx.fill();
 
+        // Connection line to target
+        ctx.strokeStyle = COLOR_FORK;
+        ctx.lineWidth = 4;
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(branchX + 8, branchY);
+
+        if (isBackward) {
+            // Backward arrow: go around
+            const midY = Math.min(fromY, toY) - 40;
+            ctx.lineTo(branchX + 30, branchY);
+            ctx.lineTo(branchX + 30, midY);
+            ctx.lineTo(toX - 30, midY);
+            ctx.lineTo(toX - 30, toY);
+            ctx.lineTo(toX - 10, toY);
+        } else {
+            // Forward arrow: S-curve
+            const midX = (branchX + toX) / 2;
+            ctx.bezierCurveTo(
+                branchX + 40, branchY,
+                midX, toY,
+                toX - 10, toY
+            );
+        }
+        ctx.stroke();
+
+        // Arrow head at target
+        ctx.fillStyle = COLOR_FORK;
+        ctx.beginPath();
+        ctx.moveTo(toX - 18, toY - 6);
+        ctx.lineTo(toX - 6, toY);
+        ctx.lineTo(toX - 18, toY + 6);
+        ctx.closePath();
+        ctx.fill();
+
+        // Connection type label
+        const typeName = conn.type === 'fork' ? 'fork'
+            : conn.type === 'fan_out' ? 'fan_out'
+            : 'spawn';
+        const labelX = (branchX + toX) / 2;
+        const labelY = isBackward
+            ? Math.min(fromY, toY) - 50
+            : (branchY + toY) / 2 - 10;
         ctx.fillStyle = COLOR_LABEL;
         ctx.font = '9px "JetBrainsMono Nerd Font", monospace';
         ctx.textAlign = 'center';
         ctx.fillText(typeName, labelX, labelY);
+
+        // Condition label if present
+        if (conn.condition) {
+            ctx.fillText(conn.condition, labelX, labelY + 12);
+        }
         ctx.textAlign = 'left';
     });
 
