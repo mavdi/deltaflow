@@ -1,0 +1,13 @@
+[package]
+name = "deltaflow-visualizer"
+version = "0.1.0"
+edition = "2021"
+description = "Web-based pipeline visualization for Deltaflow"
+license = "MIT"
+
+[dependencies]
+deltaflow = { path = "..", features = ["sqlite"] }
+axum = "0.7"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
