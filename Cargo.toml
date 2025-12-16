@@ -34,4 +34,5 @@ features = ["runtime-tokio", "sqlite"]
 optional = true
 
 [dev-dependencies]
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
+deltaflow-harness = { path = "deltaflow-harness" }
