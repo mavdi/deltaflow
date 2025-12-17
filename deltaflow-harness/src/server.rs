@@ -2,7 +2,8 @@
 
 use axum::{
     extract::State,
-    response::{Html, Json},
+    http::{header, StatusCode},
+    response::{Html, IntoResponse, Json, Response},
     routing::get,
     Router,
 };
@@ -20,6 +21,12 @@ pub fn create_router(state: Arc<VisualizerState>) -> Router {
     Router::new()
         .route("/", get(serve_index))
         .route("/api/graph", get(serve_graph))
+        .route("/css/main.css", get(serve_css))
+        .route("/js/config.js", get(serve_js_config))
+        .route("/js/graph.js", get(serve_js_graph))
+        .route("/js/render.js", get(serve_js_render))
+        .route("/js/interaction.js", get(serve_js_interaction))
+        .route("/js/main.js", get(serve_js_main))
         .with_state(state)
 }
 
@@ -29,6 +36,44 @@ async fn serve_index() -> Html<&'static str> {
 
 async fn serve_graph(State(state): State<Arc<VisualizerState>>) -> Json<GraphResponse> {
     Json(state.graph.clone())
+}
+
+async fn serve_css() -> Response {
+    (
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "text/css")],
+        include_str!("../assets/css/main.css"),
+    )
+        .into_response()
+}
+
+async fn serve_js_config() -> Response {
+    serve_js(include_str!("../assets/js/config.js"))
+}
+
+async fn serve_js_graph() -> Response {
+    serve_js(include_str!("../assets/js/graph.js"))
+}
+
+async fn serve_js_render() -> Response {
+    serve_js(include_str!("../assets/js/render.js"))
+}
+
+async fn serve_js_interaction() -> Response {
+    serve_js(include_str!("../assets/js/interaction.js"))
+}
+
+async fn serve_js_main() -> Response {
+    serve_js(include_str!("../assets/js/main.js"))
+}
+
+fn serve_js(content: &'static str) -> Response {
+    (
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "application/javascript")],
+        content,
+    )
+        .into_response()
 }
 
 /// Start the visualizer server.

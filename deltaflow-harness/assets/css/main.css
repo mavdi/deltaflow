@@ -1,0 +1,42 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'JetBrainsMono Nerd Font', 'FiraCode Nerd Font', 'Hack Nerd Font', monospace;
+  background: #000000;
+  color: #ffffff;
+  overflow: hidden;
+}
+
+#graph {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  cursor: grab;
+}
+
+#graph:active {
+  cursor: grabbing;
+}
+
+#loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 14px;
+  color: #888888;
+}
+
+/* Node hover effect */
+.node:hover rect {
+  stroke-width: 3;
+}
+
+/* Edge hover effect */
+.edge:hover {
+  stroke-width: 3 !important;
+}
