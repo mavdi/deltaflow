@@ -1,15 +1,19 @@
-//! Complex visualizer demo demonstrating layout edge cases
+//! Order Processing Pipeline - Visualizer Demo
 //!
 //! ```bash
 //! cargo run --example visualizer_complex --features sqlite
 //! ```
 //!
-//! Edge cases demonstrated:
-//! - Diamond pattern: ingest -> enrich -> store AND ingest -> store directly
-//! - Multiple sources to same target: enrich AND alert both fork to audit
-//! - Backwards arrow: store forks back to monitor (column 2 -> column 0)
-//! - Independent roots: ingest and monitor are separate root pipelines
-//! - Deep chain: ingest -> enrich -> transform -> store (tests column depth)
+//! A realistic e-commerce order processing pipeline demonstrating:
+//! - Single entry point (orders)
+//! - Conditional branching (valid/invalid, in-stock/backorder)
+//! - Convergence (multiple paths lead to notifications)
+//! - Retry cycle (backorder -> fulfillment when restocked)
+//!
+//! Flow:
+//!   orders -> fulfillment -> shipping -> notify
+//!          -> returns -> notify
+//!          -> fulfillment -> backorder -> fulfillment (retry cycle)
 
 use async_trait::async_trait;
 use deltaflow::{
@@ -19,23 +23,25 @@ use deltaflow_harness::RunnerHarnessExt;
 use serde::{Deserialize, Serialize};
 
 // ============================================================================
-// Generic event type for all pipelines
+// Order type used across all pipelines
 // ============================================================================
 
 #[derive(Clone, Serialize, Deserialize)]
-struct Event {
+struct Order {
     id: String,
-    data: String,
+    customer: String,
+    items: Vec<String>,
 }
 
-impl HasEntityId for Event {
+impl HasEntityId for Order {
     fn entity_id(&self) -> String {
         self.id.clone()
     }
 }
 
 // ============================================================================
-// Ingest Pipeline: ingest -> validate -> enrich
+// Orders Pipeline (ENTRY POINT): Receive -> Validate
+// Branches to: fulfillment (valid), returns (invalid)
 // ============================================================================
 
 struct Receive;
@@ -43,8 +49,8 @@ struct Validate;
 
 #[async_trait]
 impl Step for Receive {
-    type Input = Event;
-    type Output = Event;
+    type Input = Order;
+    type Output = Order;
     fn name(&self) -> &'static str { "Receive" }
     async fn execute(&self, input: Self::Input) -> Result<Self::Output, StepError> {
         Ok(input)
@@ -53,8 +59,8 @@ impl Step for Receive {
 
 #[async_trait]
 impl Step for Validate {
-    type Input = Event;
-    type Output = Event;
+    type Input = Order;
+    type Output = Order;
     fn name(&self) -> &'static str { "Validate" }
     async fn execute(&self, input: Self::Input) -> Result<Self::Output, StepError> {
         Ok(input)
@@ -62,157 +68,151 @@ impl Step for Validate {
 }
 
 // ============================================================================
-// Enrich Pipeline: parse -> transform
+// Fulfillment Pipeline: CheckStock -> Reserve -> Pack
+// Branches to: shipping (in stock), backorder (out of stock)
 // ============================================================================
 
-struct Parse;
-struct Transform;
+struct CheckStock;
+struct Reserve;
+struct Pack;
 
 #[async_trait]
-impl Step for Parse {
-    type Input = Event;
-    type Output = Event;
-    fn name(&self) -> &'static str { "Parse" }
+impl Step for CheckStock {
+    type Input = Order;
+    type Output = Order;
+    fn name(&self) -> &'static str { "CheckStock" }
     async fn execute(&self, input: Self::Input) -> Result<Self::Output, StepError> {
         Ok(input)
     }
 }
 
 #[async_trait]
-impl Step for Transform {
-    type Input = Event;
-    type Output = Event;
-    fn name(&self) -> &'static str { "Transform" }
-    async fn execute(&self, input: Self::Input) -> Result<Self::Output, StepError> {
-        Ok(input)
-    }
-}
-
-// ============================================================================
-// Store Pipeline: index -> persist -> replicate
-// ============================================================================
-
-struct Index;
-struct Persist;
-struct Replicate;
-
-#[async_trait]
-impl Step for Index {
-    type Input = Event;
-    type Output = Event;
-    fn name(&self) -> &'static str { "Index" }
+impl Step for Reserve {
+    type Input = Order;
+    type Output = Order;
+    fn name(&self) -> &'static str { "Reserve" }
     async fn execute(&self, input: Self::Input) -> Result<Self::Output, StepError> {
         Ok(input)
     }
 }
 
 #[async_trait]
-impl Step for Persist {
-    type Input = Event;
-    type Output = Event;
-    fn name(&self) -> &'static str { "Persist" }
-    async fn execute(&self, input: Self::Input) -> Result<Self::Output, StepError> {
-        Ok(input)
-    }
-}
-
-#[async_trait]
-impl Step for Replicate {
-    type Input = Event;
-    type Output = Event;
-    fn name(&self) -> &'static str { "Replicate" }
+impl Step for Pack {
+    type Input = Order;
+    type Output = Order;
+    fn name(&self) -> &'static str { "Pack" }
     async fn execute(&self, input: Self::Input) -> Result<Self::Output, StepError> {
         Ok(input)
     }
 }
 
 // ============================================================================
-// Monitor Pipeline (independent root): watch -> detect
+// Shipping Pipeline: Label -> Dispatch
+// Branches to: notify (shipment confirmation)
 // ============================================================================
 
-struct Watch;
-struct Detect;
+struct Label;
+struct Dispatch;
 
 #[async_trait]
-impl Step for Watch {
-    type Input = Event;
-    type Output = Event;
-    fn name(&self) -> &'static str { "Watch" }
+impl Step for Label {
+    type Input = Order;
+    type Output = Order;
+    fn name(&self) -> &'static str { "Label" }
     async fn execute(&self, input: Self::Input) -> Result<Self::Output, StepError> {
         Ok(input)
     }
 }
 
 #[async_trait]
-impl Step for Detect {
-    type Input = Event;
-    type Output = Event;
-    fn name(&self) -> &'static str { "Detect" }
-    async fn execute(&self, input: Self::Input) -> Result<Self::Output, StepError> {
-        Ok(input)
-    }
-}
-
-// ============================================================================
-// Alert Pipeline: evaluate -> notify -> escalate
-// ============================================================================
-
-struct Evaluate;
-struct Notify;
-struct Escalate;
-
-#[async_trait]
-impl Step for Evaluate {
-    type Input = Event;
-    type Output = Event;
-    fn name(&self) -> &'static str { "Evaluate" }
-    async fn execute(&self, input: Self::Input) -> Result<Self::Output, StepError> {
-        Ok(input)
-    }
-}
-
-#[async_trait]
-impl Step for Notify {
-    type Input = Event;
-    type Output = Event;
-    fn name(&self) -> &'static str { "Notify" }
-    async fn execute(&self, input: Self::Input) -> Result<Self::Output, StepError> {
-        Ok(input)
-    }
-}
-
-#[async_trait]
-impl Step for Escalate {
-    type Input = Event;
-    type Output = Event;
-    fn name(&self) -> &'static str { "Escalate" }
+impl Step for Dispatch {
+    type Input = Order;
+    type Output = Order;
+    fn name(&self) -> &'static str { "Dispatch" }
     async fn execute(&self, input: Self::Input) -> Result<Self::Output, StepError> {
         Ok(input)
     }
 }
 
 // ============================================================================
-// Audit Pipeline: record -> archive
+// Backorder Pipeline: Queue -> Source
+// Branches to: fulfillment (RETRY CYCLE - when items restocked)
 // ============================================================================
 
-struct Record;
-struct Archive;
+struct Queue;
+struct Source;
 
 #[async_trait]
-impl Step for Record {
-    type Input = Event;
-    type Output = Event;
-    fn name(&self) -> &'static str { "Record" }
+impl Step for Queue {
+    type Input = Order;
+    type Output = Order;
+    fn name(&self) -> &'static str { "Queue" }
     async fn execute(&self, input: Self::Input) -> Result<Self::Output, StepError> {
         Ok(input)
     }
 }
 
 #[async_trait]
-impl Step for Archive {
-    type Input = Event;
-    type Output = Event;
-    fn name(&self) -> &'static str { "Archive" }
+impl Step for Source {
+    type Input = Order;
+    type Output = Order;
+    fn name(&self) -> &'static str { "Source" }
+    async fn execute(&self, input: Self::Input) -> Result<Self::Output, StepError> {
+        Ok(input)
+    }
+}
+
+// ============================================================================
+// Returns Pipeline: Process -> Refund
+// Branches to: notify (refund confirmation)
+// ============================================================================
+
+struct Process;
+struct Refund;
+
+#[async_trait]
+impl Step for Process {
+    type Input = Order;
+    type Output = Order;
+    fn name(&self) -> &'static str { "Process" }
+    async fn execute(&self, input: Self::Input) -> Result<Self::Output, StepError> {
+        Ok(input)
+    }
+}
+
+#[async_trait]
+impl Step for Refund {
+    type Input = Order;
+    type Output = Order;
+    fn name(&self) -> &'static str { "Refund" }
+    async fn execute(&self, input: Self::Input) -> Result<Self::Output, StepError> {
+        Ok(input)
+    }
+}
+
+// ============================================================================
+// Notify Pipeline (TERMINAL): Format -> Send
+// Receives from: shipping, returns
+// ============================================================================
+
+struct Format;
+struct Send;
+
+#[async_trait]
+impl Step for Format {
+    type Input = Order;
+    type Output = Order;
+    fn name(&self) -> &'static str { "Format" }
+    async fn execute(&self, input: Self::Input) -> Result<Self::Output, StepError> {
+        Ok(input)
+    }
+}
+
+#[async_trait]
+impl Step for Send {
+    type Input = Order;
+    type Output = Order;
+    fn name(&self) -> &'static str { "Send" }
     async fn execute(&self, input: Self::Input) -> Result<Self::Output, StepError> {
         Ok(input)
     }
@@ -221,19 +221,18 @@ impl Step for Archive {
 #[tokio::main]
 async fn main() {
     println!("==============================================");
-    println!("  Deltaflow Harness - Edge Cases Demo");
+    println!("  Order Processing Pipeline - Visualizer Demo");
     println!("==============================================");
     println!();
     println!("Open http://localhost:3000 in your browser");
     println!("Press Ctrl+C to stop");
     println!();
-    println!("Edge cases demonstrated:");
-    println!("  [Diamond]     ingest -> enrich -> store");
-    println!("                ingest -----------> store");
-    println!("  [Multi-src]   enrich -> audit");
-    println!("                alert  -> audit");
-    println!("  [Cycle]       store  -> ingest (backwards arrow)");
-    println!("  [Indep roots] ingest and monitor are separate roots");
+    println!("Pipeline flow:");
+    println!("  orders -----> fulfillment ---> shipping ---> notify");
+    println!("    |               |                           ^");
+    println!("    |               +---> backorder --+         |");
+    println!("    |                     (retry) ----+         |");
+    println!("    +---> returns --------------------------> notify");
     println!();
 
     // Create in-memory SQLite store
@@ -242,81 +241,84 @@ async fn main() {
     store.run_migrations().await.unwrap();
 
     // ========================================================================
-    // Pipeline: ingest (ROOT, Column 0)
-    // Forks to: enrich (diamond leg 1), store (diamond leg 2 - direct)
+    // Pipeline: orders (ENTRY POINT)
+    // Receives orders, validates them, routes to fulfillment or returns
     // ========================================================================
-    let ingest = Pipeline::new("ingest")
+    let orders = Pipeline::new("orders")
         .start_with(Receive)
         .then(Validate)
-        .fork_when_desc(|_: &Event| true, "enrich", "to_enrich")
-        .fork_when_desc(|_: &Event| true, "store", "direct")  // Diamond: skip enrich
+        .fork_when_desc(|_: &Order| true, "fulfillment", "valid")
+        .fork_when_desc(|_: &Order| false, "returns", "invalid")  // Would check validation result
         .with_recorder(NoopRecorder)
         .build();
 
     // ========================================================================
-    // Pipeline: enrich (Column 1)
-    // Forks to: store (completes diamond), audit (multi-source test)
+    // Pipeline: fulfillment
+    // Checks inventory, reserves items, packs order
+    // Routes to shipping (in stock) or backorder (out of stock)
     // ========================================================================
-    let enrich = Pipeline::new("enrich")
-        .start_with(Parse)
-        .then(Transform)
-        .fork_when_desc(|_: &Event| true, "store", "enriched")
-        .fork_when_desc(|_: &Event| true, "audit", "for_audit")  // Multi-source leg 1
+    let fulfillment = Pipeline::new("fulfillment")
+        .start_with(CheckStock)
+        .then(Reserve)
+        .then(Pack)
+        .fork_when_desc(|_: &Order| true, "shipping", "in_stock")
+        .fork_when_desc(|_: &Order| false, "backorder", "out_of_stock")  // Would check stock
         .with_recorder(NoopRecorder)
         .build();
 
     // ========================================================================
-    // Pipeline: store (Column 2)
-    // Forks to: ingest (BACKWARDS/CYCLE - column 2 back to column 0)
+    // Pipeline: shipping
+    // Labels and dispatches the order, then notifies customer
     // ========================================================================
-    let store_pipeline = Pipeline::new("store")
-        .start_with(Index)
-        .then(Persist)
-        .then(Replicate)
-        .fork_when_desc(|_: &Event| true, "ingest", "retry")  // Cycle back to start!
+    let shipping = Pipeline::new("shipping")
+        .start_with(Label)
+        .then(Dispatch)
+        .fork_when_desc(|_: &Order| true, "notify", "shipped")
         .with_recorder(NoopRecorder)
         .build();
 
     // ========================================================================
-    // Pipeline: monitor (ROOT, Column 0 - independent of ingest)
-    // Forks to: alert
+    // Pipeline: backorder
+    // Queues order, sources items, then retries fulfillment
+    // This creates a CYCLE back to fulfillment
     // ========================================================================
-    let monitor = Pipeline::new("monitor")
-        .start_with(Watch)
-        .then(Detect)
-        .fork_when_desc(|_: &Event| true, "alert", "detected")
+    let backorder = Pipeline::new("backorder")
+        .start_with(Queue)
+        .then(Source)
+        .fork_when_desc(|_: &Order| true, "fulfillment", "restocked")  // RETRY CYCLE
         .with_recorder(NoopRecorder)
         .build();
 
     // ========================================================================
-    // Pipeline: alert (Column 1, child of monitor)
-    // Forks to: audit (multi-source leg 2)
+    // Pipeline: returns
+    // Processes invalid/returned orders, issues refund, notifies customer
     // ========================================================================
-    let alert = Pipeline::new("alert")
-        .start_with(Evaluate)
-        .then(Notify)
-        .then(Escalate)
-        .fork_when_desc(|_: &Event| true, "audit", "alert_log")  // Multi-source leg 2
+    let returns = Pipeline::new("returns")
+        .start_with(Process)
+        .then(Refund)
+        .fork_when_desc(|_: &Order| true, "notify", "refunded")
         .with_recorder(NoopRecorder)
         .build();
 
     // ========================================================================
-    // Pipeline: audit (Column 2 - receives from enrich AND alert)
+    // Pipeline: notify (TERMINAL)
+    // Formats and sends notifications to customers
+    // Receives from: shipping (order shipped) and returns (refund issued)
     // ========================================================================
-    let audit = Pipeline::new("audit")
-        .start_with(Record)
-        .then(Archive)
+    let notify = Pipeline::new("notify")
+        .start_with(Format)
+        .then(Send)
         .with_recorder(NoopRecorder)
         .build();
 
     // Build runner with all pipelines and visualizer
     let _runner = RunnerBuilder::new(store)
-        .pipeline(ingest)
-        .pipeline(enrich)
-        .pipeline(store_pipeline)
-        .pipeline(monitor)
-        .pipeline(alert)
-        .pipeline(audit)
+        .pipeline(orders)
+        .pipeline(fulfillment)
+        .pipeline(shipping)
+        .pipeline(backorder)
+        .pipeline(returns)
+        .pipeline(notify)
         .with_visualizer(3000)
         .build();
 
