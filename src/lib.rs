@@ -2,9 +2,9 @@
 //!
 //! The embeddable workflow engine.
 //!
-//! Deltaflow brings Elixir-style pipeline composition to Rust with compile-time
-//! type safety. Build observable workflows where each step transforms typed
-//! inputs to outputs - no infrastructure required.
+//! ![Pipeline visualization](https://raw.githubusercontent.com/mavdi/deltaflow/master/docs/assets/example.png)
+//!
+//! Type-safe, Elixir-inspired pipelines that run in your process. No infrastructure required.
 //!
 //! ## Why Deltaflow?
 //!
@@ -19,14 +19,41 @@
 //! use deltaflow::{Pipeline, Step, StepError, RetryPolicy, NoopRecorder};
 //!
 //! let pipeline = Pipeline::new("my_workflow")
-//!     .start_with(ParseInput)       // String -> ParsedData
-//!     .then(ProcessData)            // ParsedData -> ProcessedData
-//!     .then(FormatOutput)           // ProcessedData -> Output
+//!     .start_with(ParseInput)
+//!     .then(ProcessData)
+//!     .then(FormatOutput)
 //!     .with_retry(RetryPolicy::exponential(3))
 //!     .with_recorder(NoopRecorder)
 //!     .build();
 //!
 //! let result = pipeline.run(input).await?;
+//! ```
+//!
+//! ## Forking and Fan-out
+//!
+//! Route output to multiple downstream pipelines:
+//!
+//! ```rust,ignore
+//! let pipeline = Pipeline::new("router")
+//!     .start_with(ValidateStep)
+//!     .fork_when(|data| data.priority == "high", "fast_track")
+//!     .fork_when_desc(|data| data.needs_review, "review", "needs_review")
+//!     .fan_out(&["analytics", "archival"])
+//!     .spawn_from("notifications", |data| vec![Notification::from(data)])
+//!     .build();
+//! ```
+//!
+//! ## Web Visualizer
+//!
+//! Use `deltaflow-harness` for interactive pipeline visualization:
+//!
+//! ```rust,ignore
+//! use deltaflow_harness::RunnerHarnessExt;
+//!
+//! let runner = RunnerBuilder::new(store)
+//!     .pipeline(my_pipeline)
+//!     .with_visualizer(3000)
+//!     .build();
 //! ```
 //!
 //! ## Feature Flags
