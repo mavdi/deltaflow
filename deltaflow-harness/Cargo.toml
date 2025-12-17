@@ -11,7 +11,7 @@ keywords = ["workflow", "pipeline", "visualization", "deltaflow"]
 categories = ["development-tools", "visualization"]
 
 [dependencies]
-deltaflow = { version = "0.4", features = ["sqlite"] }
+deltaflow = { path = "..", features = ["sqlite"] }
 axum = "0.7"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
 serde = { version = "1", features = ["derive"] }
