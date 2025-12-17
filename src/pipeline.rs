@@ -15,6 +15,38 @@ type ForkPredicate<O> = Arc<dyn Fn(&O) -> bool + Send + Sync>;
 /// Type alias for dynamic spawn generator functions.
 type SpawnGenerator<O> = Arc<dyn Fn(&O) -> Vec<serde_json::Value> + Send + Sync>;
 
+use std::collections::HashMap;
+
+/// Metadata for steps and spawn operations.
+///
+/// Used to attach descriptions and tags for visualization and analytics.
+#[derive(Default, Clone, Debug, Serialize)]
+pub struct Metadata {
+    /// Human-readable description for visualization.
+    pub description: Option<String>,
+    /// Arbitrary key-value tags for filtering and analytics.
+    pub tags: HashMap<String, String>,
+}
+
+impl Metadata {
+    /// Create empty metadata.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the description.
+    pub fn with_description(mut self, description: &str) -> Self {
+        self.description = Some(description.to_string());
+        self
+    }
+
+    /// Add a tag.
+    pub fn with_tag(mut self, key: &str, value: &str) -> Self {
+        self.tags.insert(key.to_string(), value.to_string());
+        self
+    }
+}
+
 /// A rule for spawning work after pipeline completion.
 #[derive(Clone)]
 pub enum SpawnRule<O> {

@@ -66,8 +66,8 @@ pub mod retry;
 pub mod step;
 
 pub use pipeline::{
-    BuiltPipeline, DynamicSpawnNode, FanOutNode, ForkNode, HasEntityId, Pipeline, PipelineError,
-    PipelineGraph, SpawnRule, StepNode,
+    BuiltPipeline, DynamicSpawnNode, FanOutNode, ForkNode, HasEntityId, Metadata, Pipeline,
+    PipelineError, PipelineGraph, SpawnRule, StepNode,
 };
 pub use recorder::{NoopRecorder, Recorder, RunId, RunStatus, StepId, StepStatus};
 pub use retry::RetryPolicy;
