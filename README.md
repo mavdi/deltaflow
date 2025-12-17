@@ -4,6 +4,8 @@ The embeddable workflow engine.
 
 Type-safe, Elixir-inspired pipelines that run in your process. No infrastructure required.
 
+![Pipeline visualization](https://raw.githubusercontent.com/mavdi/deltaflow/master/docs/assets/example.png)
+
 ## Why Deltaflow?
 
 - **Type-safe composition** - Compiler enforces step output matches next step's input
@@ -112,6 +114,9 @@ let pipeline = Pipeline::new("market_data")
     .fork_when(|d| d.asset_class == "crypto", "crypto_analysis")
     .fork_when(|d| d.asset_class == "equity", "equity_analysis")
 
+    // Conditional fork with description (for visualization)
+    .fork_when_desc(|d| d.priority == "high", "priority_queue", "high_priority")
+
     // Static fan-out - always sends to all targets
     .fan_out(&["ml_pipeline", "stats_pipeline"])
 
@@ -126,7 +131,11 @@ let pipeline = Pipeline::new("market_data")
     .build();
 ```
 
+**Note:** Multiple forks can match simultaneously - they are not mutually exclusive.
+
 ### Pipeline Visualization
+
+#### Exporting Pipeline Structure
 
 Export pipeline structure for visualization tools:
 
@@ -135,6 +144,26 @@ let graph = pipeline.to_graph();
 let json = serde_json::to_string_pretty(&graph)?;
 // Returns JSON with steps, forks, fan_outs, dynamic_spawns
 ```
+
+#### Web Visualizer
+
+For interactive pipeline visualization during development:
+
+```toml
+[dev-dependencies]
+deltaflow-harness = "0.1"
+```
+
+```rust
+use deltaflow_harness::RunnerHarnessExt;
+
+let runner = RunnerBuilder::new(store)
+    .pipeline(my_pipeline)
+    .with_visualizer(3000)  // Starts web UI at http://localhost:3000
+    .build();
+```
+
+The visualizer shows pipeline steps as connected boxes with fork, fan-out, and spawn connections between pipelines.
 
 ## Periodic Scheduler
 
@@ -184,6 +213,19 @@ let runner = RunnerBuilder::new(task_store)
 ```
 
 Pipelines with custom concurrency use their own semaphore instead of the global `max_concurrent` limit.
+
+## Examples
+
+See the `examples/` directory for working code:
+
+- **basic.rs** - Minimal pipeline setup
+- **visualizer_demo.rs** - Web visualizer basics
+- **visualizer_complex.rs** - Complex topologies (diamond patterns, cycles, multi-source)
+
+Run with:
+```bash
+cargo run --example visualizer_demo --features sqlite
+```
 
 ## Status
 
