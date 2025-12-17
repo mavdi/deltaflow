@@ -4,6 +4,11 @@ version = "0.1.0"
 edition = "2021"
 description = "Web-based pipeline visualization for Deltaflow"
 license = "MIT"
+repository = "https://github.com/mavdi/deltaflow"
+documentation = "https://docs.rs/deltaflow-harness"
+readme = "README.md"
+keywords = ["workflow", "pipeline", "visualization", "deltaflow"]
+categories = ["development-tools", "visualization"]
 
 [dependencies]
 deltaflow = { path = "..", features = ["sqlite"] }
