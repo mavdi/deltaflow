@@ -1,6 +1,6 @@
 [package]
 name = "deltaflow-harness"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Web-based pipeline visualization for Deltaflow"
 license = "MIT"
@@ -11,7 +11,7 @@ keywords = ["workflow", "pipeline", "visualization", "deltaflow"]
 categories = ["development-tools", "visualization"]
 
 [dependencies]
-deltaflow = { path = "..", features = ["sqlite"] }
+deltaflow = { version = "0.4.0", path = "..", features = ["sqlite"] }
 axum = "0.7"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
 serde = { version = "1", features = ["derive"] }
