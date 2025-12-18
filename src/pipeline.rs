@@ -72,7 +72,7 @@ pub struct PipelineGraph {
     pub steps: Vec<StepNode>,
     pub forks: Vec<ForkNode>,
     pub fan_outs: Vec<FanOutNode>,
-    pub dynamic_spawns: Vec<DynamicSpawnNode>,
+    pub emits: Vec<EmitNode>,
 }
 
 /// A step in the pipeline graph.
@@ -80,6 +80,8 @@ pub struct PipelineGraph {
 pub struct StepNode {
     pub name: String,
     pub index: usize,
+    #[serde(flatten)]
+    pub metadata: Metadata,
 }
 
 /// A conditional fork declaration.
@@ -87,18 +89,24 @@ pub struct StepNode {
 pub struct ForkNode {
     pub target_pipeline: String,
     pub condition: String,
+    #[serde(flatten)]
+    pub metadata: Metadata,
 }
 
 /// A static fan-out declaration.
 #[derive(Debug, Clone, Serialize)]
 pub struct FanOutNode {
     pub targets: Vec<String>,
+    #[serde(flatten)]
+    pub metadata: Metadata,
 }
 
-/// A dynamic spawn declaration.
+/// A dynamic spawn (emit) declaration.
 #[derive(Debug, Clone, Serialize)]
-pub struct DynamicSpawnNode {
+pub struct EmitNode {
     pub target_pipeline: String,
+    #[serde(flatten)]
+    pub metadata: Metadata,
 }
 
 /// Error returned by pipeline execution.
@@ -695,12 +703,13 @@ where
             .map(|(index, name)| StepNode {
                 name: name.to_string(),
                 index,
+                metadata: Metadata::default(),
             })
             .collect();
 
         let mut forks = Vec::new();
         let mut fan_outs = Vec::new();
-        let mut dynamic_spawns = Vec::new();
+        let mut emits = Vec::new();
 
         for rule in &self.spawn_rules {
             match rule {
@@ -712,16 +721,19 @@ where
                     forks.push(ForkNode {
                         target_pipeline: target.to_string(),
                         condition: description.clone(),
+                        metadata: Metadata::default(),
                     });
                 }
                 SpawnRule::FanOut { targets } => {
                     fan_outs.push(FanOutNode {
                         targets: targets.iter().map(|s| s.to_string()).collect(),
+                        metadata: Metadata::default(),
                     });
                 }
                 SpawnRule::Dynamic { target, .. } => {
-                    dynamic_spawns.push(DynamicSpawnNode {
+                    emits.push(EmitNode {
                         target_pipeline: target.to_string(),
+                        metadata: Metadata::default(),
                     });
                 }
             }
@@ -732,7 +744,7 @@ where
             steps,
             forks,
             fan_outs,
-            dynamic_spawns,
+            emits,
         }
     }
 }

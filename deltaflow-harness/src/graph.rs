@@ -56,8 +56,8 @@ impl GraphResponse {
                 }
             }
 
-            // Dynamic spawns
-            for spawn in &graph.dynamic_spawns {
+            // Emits (dynamic spawns)
+            for spawn in &graph.emits {
                 connections.push(Connection {
                     from: graph.name.clone(),
                     to: spawn.target_pipeline.clone(),
@@ -77,7 +77,7 @@ impl GraphResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use deltaflow::{ForkNode, StepNode};
+    use deltaflow::{ForkNode, Metadata, StepNode};
 
     #[test]
     fn test_from_graphs_extracts_connections() {
@@ -87,23 +87,26 @@ mod tests {
                 steps: vec![StepNode {
                     name: "Step1".to_string(),
                     index: 0,
+                    metadata: Metadata::default(),
                 }],
                 forks: vec![ForkNode {
                     target_pipeline: "pipeline_b".to_string(),
                     condition: "always".to_string(),
+                    metadata: Metadata::default(),
                 }],
                 fan_outs: vec![],
-                dynamic_spawns: vec![],
+                emits: vec![],
             },
             PipelineGraph {
                 name: "pipeline_b".to_string(),
                 steps: vec![StepNode {
                     name: "Step2".to_string(),
                     index: 0,
+                    metadata: Metadata::default(),
                 }],
                 forks: vec![],
                 fan_outs: vec![],
-                dynamic_spawns: vec![],
+                emits: vec![],
             },
         ];
 
