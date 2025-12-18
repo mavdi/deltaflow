@@ -171,3 +171,87 @@ fn test_step_without_metadata_has_empty_metadata() {
     assert!(graph.steps[0].metadata.description.is_none());
     assert!(graph.steps[1].metadata.description.is_none());
 }
+
+#[test]
+fn test_fork_builder_desc() {
+    let pipeline = Pipeline::new("test")
+        .start_with(DummyStep)
+        .fork_when(|_: &String| true, "target")
+        .desc("condition met")
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let graph = pipeline.to_graph();
+    assert_eq!(graph.forks[0].condition, "condition met");
+    assert_eq!(
+        graph.forks[0].metadata.description,
+        Some("condition met".to_string())
+    );
+}
+
+#[test]
+fn test_fork_builder_tag() {
+    let pipeline = Pipeline::new("test")
+        .start_with(DummyStep)
+        .fork_when(|_: &String| true, "target")
+        .tag("route", "primary")
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let graph = pipeline.to_graph();
+    assert_eq!(
+        graph.forks[0].metadata.tags.get("route"),
+        Some(&"primary".to_string())
+    );
+}
+
+#[test]
+fn test_emit_builder_desc() {
+    let pipeline = Pipeline::new("test")
+        .start_with(DummyStep)
+        .emit("target", |s: &String| vec![s.clone()])
+        .desc("emit items")
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let graph = pipeline.to_graph();
+    assert_eq!(
+        graph.emits[0].metadata.description,
+        Some("emit items".to_string())
+    );
+}
+
+#[test]
+fn test_fan_out_builder_desc() {
+    let pipeline = Pipeline::new("test")
+        .start_with(DummyStep)
+        .fan_out(&["a", "b"])
+        .desc("broadcast")
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let graph = pipeline.to_graph();
+    assert_eq!(
+        graph.fan_outs[0].metadata.description,
+        Some("broadcast".to_string())
+    );
+}
+
+#[test]
+fn test_chained_spawn_builders() {
+    let pipeline = Pipeline::new("test")
+        .start_with(DummyStep)
+        .fork_when(|_: &String| true, "t1")
+        .desc("fork")
+        .fan_out(&["t2"])
+        .desc("fanout")
+        .emit("t3", |s: &String| vec![s.clone()])
+        .desc("emit")
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let graph = pipeline.to_graph();
+    assert_eq!(graph.forks.len(), 1);
+    assert_eq!(graph.fan_outs.len(), 1);
+    assert_eq!(graph.emits.len(), 1);
+}

@@ -587,8 +587,7 @@ where
     }
 
     /// Conditionally fork to a target pipeline.
-    // TODO: Task 5 - Return dedicated ForkBuilder instead of Self
-    pub fn fork_when<F>(mut self, predicate: F, target: &'static str) -> Self
+    pub fn fork_when<F>(mut self, predicate: F, target: &'static str) -> ForkBuilder<I, O, Chain>
     where
         F: Fn(&O) -> bool + Send + Sync + 'static,
     {
@@ -597,7 +596,11 @@ where
             predicate: Arc::new(predicate),
             metadata: Metadata::default(),
         });
-        self
+        let rule_index = self.pipeline.spawn_rules.len() - 1;
+        ForkBuilder {
+            pipeline: self.pipeline,
+            rule_index,
+        }
     }
 
     /// Conditionally fork with a custom description for visualization.
@@ -619,13 +622,16 @@ where
     }
 
     /// Fan out to multiple targets.
-    // TODO: Task 5 - Return dedicated FanOutBuilder instead of Self
-    pub fn fan_out(mut self, targets: &[&'static str]) -> Self {
+    pub fn fan_out(mut self, targets: &[&'static str]) -> FanOutBuilder<I, O, Chain> {
         self.pipeline.spawn_rules.push(SpawnRule::FanOut {
             targets: targets.to_vec(),
             metadata: Metadata::default(),
         });
-        self
+        let rule_index = self.pipeline.spawn_rules.len() - 1;
+        FanOutBuilder {
+            pipeline: self.pipeline,
+            rule_index,
+        }
     }
 
     /// Declare follow-up tasks to spawn on successful completion.
@@ -648,13 +654,467 @@ where
     }
 
     /// Alias for spawn_from (emit).
-    // TODO: Task 5 - Return dedicated EmitBuilder instead of Self
-    pub fn emit<T, F>(self, target: &'static str, generator: F) -> Self
+    pub fn emit<T, F>(mut self, target: &'static str, generator: F) -> EmitBuilder<I, O, Chain>
     where
         T: Serialize + 'static,
         F: Fn(&O) -> Vec<T> + Send + Sync + 'static,
     {
-        self.spawn_from(target, generator)
+        self.pipeline.spawn_rules.push(SpawnRule::Dynamic {
+            target,
+            generator: Arc::new(move |output| {
+                generator(output)
+                    .into_iter()
+                    .filter_map(|item| serde_json::to_value(item).ok())
+                    .collect()
+            }),
+            metadata: Metadata::default(),
+        });
+        let rule_index = self.pipeline.spawn_rules.len() - 1;
+        EmitBuilder {
+            pipeline: self.pipeline,
+            rule_index,
+        }
+    }
+
+    /// Build the pipeline.
+    pub fn build(self) -> BuiltPipeline<I, O, Chain> {
+        BuiltPipeline {
+            name: self.pipeline.name,
+            chain: self.pipeline.chain,
+            retry_policy: self.pipeline.retry_policy,
+            recorder: self.pipeline.recorder,
+            spawn_rules: self.pipeline.spawn_rules,
+            step_metadata: self.pipeline.step_metadata,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+/// Builder returned after fork_when, allowing metadata configuration.
+pub struct ForkBuilder<I, O, Chain>
+where
+    Chain: StepChain<I, O>,
+{
+    pipeline: Pipeline<I, O, Chain>,
+    rule_index: usize,
+}
+
+impl<I, O, Chain> ForkBuilder<I, O, Chain>
+where
+    I: Send + Sync + Clone + 'static,
+    O: Send + Sync + Clone + 'static,
+    Chain: StepChain<I, O> + Send + Sync + 'static,
+{
+    /// Add a description to this fork.
+    pub fn desc(mut self, description: &str) -> Self {
+        if let Some(SpawnRule::Fork { metadata, .. }) =
+            self.pipeline.spawn_rules.get_mut(self.rule_index)
+        {
+            metadata.description = Some(description.to_string());
+        }
+        self
+    }
+
+    /// Add a tag to this fork.
+    pub fn tag(mut self, key: &str, value: &str) -> Self {
+        if let Some(SpawnRule::Fork { metadata, .. }) =
+            self.pipeline.spawn_rules.get_mut(self.rule_index)
+        {
+            metadata.tags.insert(key.to_string(), value.to_string());
+        }
+        self
+    }
+
+    /// Declare follow-up tasks to spawn on successful completion (deprecated, use emit).
+    #[deprecated(since = "0.5.0", note = "Use emit() instead")]
+    pub fn spawn_from<T, F>(self, target: &'static str, generator: F) -> EmitBuilder<I, O, Chain>
+    where
+        T: Serialize + 'static,
+        F: Fn(&O) -> Vec<T> + Send + Sync + 'static,
+    {
+        self.emit(target, generator)
+    }
+
+    /// Add another step to the pipeline.
+    pub fn then<S>(self, step: S) -> StepBuilder<I, S::Output, impl StepChain<I, S::Output>>
+    where
+        S: Step<Input = O> + 'static,
+    {
+        let mut pipeline = Pipeline {
+            name: self.pipeline.name,
+            chain: ThenChain {
+                first: self.pipeline.chain,
+                step: StepWrapper(step),
+                _phantom: std::marker::PhantomData,
+            },
+            retry_policy: self.pipeline.retry_policy,
+            recorder: self.pipeline.recorder,
+            spawn_rules: Vec::new(),
+            step_metadata: self.pipeline.step_metadata,
+            _phantom: std::marker::PhantomData,
+        };
+        pipeline.step_metadata.push(Metadata::default());
+        let step_index = pipeline.step_metadata.len() - 1;
+        StepBuilder { pipeline, step_index }
+    }
+
+    /// Conditionally fork to a target pipeline.
+    pub fn fork_when<F>(mut self, predicate: F, target: &'static str) -> ForkBuilder<I, O, Chain>
+    where
+        F: Fn(&O) -> bool + Send + Sync + 'static,
+    {
+        self.pipeline.spawn_rules.push(SpawnRule::Fork {
+            target,
+            predicate: Arc::new(predicate),
+            metadata: Metadata::default(),
+        });
+        let rule_index = self.pipeline.spawn_rules.len() - 1;
+        ForkBuilder {
+            pipeline: self.pipeline,
+            rule_index,
+        }
+    }
+
+    /// Fan out to multiple targets.
+    pub fn fan_out(mut self, targets: &[&'static str]) -> FanOutBuilder<I, O, Chain> {
+        self.pipeline.spawn_rules.push(SpawnRule::FanOut {
+            targets: targets.to_vec(),
+            metadata: Metadata::default(),
+        });
+        let rule_index = self.pipeline.spawn_rules.len() - 1;
+        FanOutBuilder {
+            pipeline: self.pipeline,
+            rule_index,
+        }
+    }
+
+    /// Emit tasks dynamically.
+    pub fn emit<T, F>(mut self, target: &'static str, generator: F) -> EmitBuilder<I, O, Chain>
+    where
+        T: Serialize + 'static,
+        F: Fn(&O) -> Vec<T> + Send + Sync + 'static,
+    {
+        self.pipeline.spawn_rules.push(SpawnRule::Dynamic {
+            target,
+            generator: Arc::new(move |output| {
+                generator(output)
+                    .into_iter()
+                    .filter_map(|item| serde_json::to_value(item).ok())
+                    .collect()
+            }),
+            metadata: Metadata::default(),
+        });
+        let rule_index = self.pipeline.spawn_rules.len() - 1;
+        EmitBuilder {
+            pipeline: self.pipeline,
+            rule_index,
+        }
+    }
+
+    /// Set retry policy.
+    pub fn with_retry(mut self, policy: RetryPolicy) -> Self {
+        self.pipeline.retry_policy = policy;
+        self
+    }
+
+    /// Set recorder.
+    pub fn with_recorder<R: Recorder + 'static>(mut self, recorder: R) -> Self {
+        self.pipeline.recorder = Arc::new(recorder);
+        self
+    }
+
+    /// Build the pipeline.
+    pub fn build(self) -> BuiltPipeline<I, O, Chain> {
+        BuiltPipeline {
+            name: self.pipeline.name,
+            chain: self.pipeline.chain,
+            retry_policy: self.pipeline.retry_policy,
+            recorder: self.pipeline.recorder,
+            spawn_rules: self.pipeline.spawn_rules,
+            step_metadata: self.pipeline.step_metadata,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+/// Builder returned after fan_out, allowing metadata configuration.
+pub struct FanOutBuilder<I, O, Chain>
+where
+    Chain: StepChain<I, O>,
+{
+    pipeline: Pipeline<I, O, Chain>,
+    rule_index: usize,
+}
+
+impl<I, O, Chain> FanOutBuilder<I, O, Chain>
+where
+    I: Send + Sync + Clone + 'static,
+    O: Send + Sync + Clone + 'static,
+    Chain: StepChain<I, O> + Send + Sync + 'static,
+{
+    /// Add a description to this fan-out.
+    pub fn desc(mut self, description: &str) -> Self {
+        if let Some(SpawnRule::FanOut { metadata, .. }) =
+            self.pipeline.spawn_rules.get_mut(self.rule_index)
+        {
+            metadata.description = Some(description.to_string());
+        }
+        self
+    }
+
+    /// Add a tag to this fan-out.
+    pub fn tag(mut self, key: &str, value: &str) -> Self {
+        if let Some(SpawnRule::FanOut { metadata, .. }) =
+            self.pipeline.spawn_rules.get_mut(self.rule_index)
+        {
+            metadata.tags.insert(key.to_string(), value.to_string());
+        }
+        self
+    }
+
+    /// Declare follow-up tasks to spawn on successful completion (deprecated, use emit).
+    #[deprecated(since = "0.5.0", note = "Use emit() instead")]
+    pub fn spawn_from<T, F>(self, target: &'static str, generator: F) -> EmitBuilder<I, O, Chain>
+    where
+        T: Serialize + 'static,
+        F: Fn(&O) -> Vec<T> + Send + Sync + 'static,
+    {
+        self.emit(target, generator)
+    }
+
+    /// Add another step to the pipeline.
+    pub fn then<S>(self, step: S) -> StepBuilder<I, S::Output, impl StepChain<I, S::Output>>
+    where
+        S: Step<Input = O> + 'static,
+    {
+        let mut pipeline = Pipeline {
+            name: self.pipeline.name,
+            chain: ThenChain {
+                first: self.pipeline.chain,
+                step: StepWrapper(step),
+                _phantom: std::marker::PhantomData,
+            },
+            retry_policy: self.pipeline.retry_policy,
+            recorder: self.pipeline.recorder,
+            spawn_rules: Vec::new(),
+            step_metadata: self.pipeline.step_metadata,
+            _phantom: std::marker::PhantomData,
+        };
+        pipeline.step_metadata.push(Metadata::default());
+        let step_index = pipeline.step_metadata.len() - 1;
+        StepBuilder { pipeline, step_index }
+    }
+
+    /// Conditionally fork to a target pipeline.
+    pub fn fork_when<F>(mut self, predicate: F, target: &'static str) -> ForkBuilder<I, O, Chain>
+    where
+        F: Fn(&O) -> bool + Send + Sync + 'static,
+    {
+        self.pipeline.spawn_rules.push(SpawnRule::Fork {
+            target,
+            predicate: Arc::new(predicate),
+            metadata: Metadata::default(),
+        });
+        let rule_index = self.pipeline.spawn_rules.len() - 1;
+        ForkBuilder {
+            pipeline: self.pipeline,
+            rule_index,
+        }
+    }
+
+    /// Fan out to multiple targets.
+    pub fn fan_out(mut self, targets: &[&'static str]) -> FanOutBuilder<I, O, Chain> {
+        self.pipeline.spawn_rules.push(SpawnRule::FanOut {
+            targets: targets.to_vec(),
+            metadata: Metadata::default(),
+        });
+        let rule_index = self.pipeline.spawn_rules.len() - 1;
+        FanOutBuilder {
+            pipeline: self.pipeline,
+            rule_index,
+        }
+    }
+
+    /// Emit tasks dynamically.
+    pub fn emit<T, F>(mut self, target: &'static str, generator: F) -> EmitBuilder<I, O, Chain>
+    where
+        T: Serialize + 'static,
+        F: Fn(&O) -> Vec<T> + Send + Sync + 'static,
+    {
+        self.pipeline.spawn_rules.push(SpawnRule::Dynamic {
+            target,
+            generator: Arc::new(move |output| {
+                generator(output)
+                    .into_iter()
+                    .filter_map(|item| serde_json::to_value(item).ok())
+                    .collect()
+            }),
+            metadata: Metadata::default(),
+        });
+        let rule_index = self.pipeline.spawn_rules.len() - 1;
+        EmitBuilder {
+            pipeline: self.pipeline,
+            rule_index,
+        }
+    }
+
+    /// Set retry policy.
+    pub fn with_retry(mut self, policy: RetryPolicy) -> Self {
+        self.pipeline.retry_policy = policy;
+        self
+    }
+
+    /// Set recorder.
+    pub fn with_recorder<R: Recorder + 'static>(mut self, recorder: R) -> Self {
+        self.pipeline.recorder = Arc::new(recorder);
+        self
+    }
+
+    /// Build the pipeline.
+    pub fn build(self) -> BuiltPipeline<I, O, Chain> {
+        BuiltPipeline {
+            name: self.pipeline.name,
+            chain: self.pipeline.chain,
+            retry_policy: self.pipeline.retry_policy,
+            recorder: self.pipeline.recorder,
+            spawn_rules: self.pipeline.spawn_rules,
+            step_metadata: self.pipeline.step_metadata,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+/// Builder returned after emit, allowing metadata configuration.
+pub struct EmitBuilder<I, O, Chain>
+where
+    Chain: StepChain<I, O>,
+{
+    pipeline: Pipeline<I, O, Chain>,
+    rule_index: usize,
+}
+
+impl<I, O, Chain> EmitBuilder<I, O, Chain>
+where
+    I: Send + Sync + Clone + 'static,
+    O: Send + Sync + Clone + 'static,
+    Chain: StepChain<I, O> + Send + Sync + 'static,
+{
+    /// Add a description to this emit.
+    pub fn desc(mut self, description: &str) -> Self {
+        if let Some(SpawnRule::Dynamic { metadata, .. }) =
+            self.pipeline.spawn_rules.get_mut(self.rule_index)
+        {
+            metadata.description = Some(description.to_string());
+        }
+        self
+    }
+
+    /// Add a tag to this emit.
+    pub fn tag(mut self, key: &str, value: &str) -> Self {
+        if let Some(SpawnRule::Dynamic { metadata, .. }) =
+            self.pipeline.spawn_rules.get_mut(self.rule_index)
+        {
+            metadata.tags.insert(key.to_string(), value.to_string());
+        }
+        self
+    }
+
+    /// Declare follow-up tasks to spawn on successful completion (deprecated, use emit).
+    #[deprecated(since = "0.5.0", note = "Use emit() instead")]
+    pub fn spawn_from<T, F>(self, target: &'static str, generator: F) -> EmitBuilder<I, O, Chain>
+    where
+        T: Serialize + 'static,
+        F: Fn(&O) -> Vec<T> + Send + Sync + 'static,
+    {
+        self.emit(target, generator)
+    }
+
+    /// Add another step to the pipeline.
+    pub fn then<S>(self, step: S) -> StepBuilder<I, S::Output, impl StepChain<I, S::Output>>
+    where
+        S: Step<Input = O> + 'static,
+    {
+        let mut pipeline = Pipeline {
+            name: self.pipeline.name,
+            chain: ThenChain {
+                first: self.pipeline.chain,
+                step: StepWrapper(step),
+                _phantom: std::marker::PhantomData,
+            },
+            retry_policy: self.pipeline.retry_policy,
+            recorder: self.pipeline.recorder,
+            spawn_rules: Vec::new(),
+            step_metadata: self.pipeline.step_metadata,
+            _phantom: std::marker::PhantomData,
+        };
+        pipeline.step_metadata.push(Metadata::default());
+        let step_index = pipeline.step_metadata.len() - 1;
+        StepBuilder { pipeline, step_index }
+    }
+
+    /// Conditionally fork to a target pipeline.
+    pub fn fork_when<F>(mut self, predicate: F, target: &'static str) -> ForkBuilder<I, O, Chain>
+    where
+        F: Fn(&O) -> bool + Send + Sync + 'static,
+    {
+        self.pipeline.spawn_rules.push(SpawnRule::Fork {
+            target,
+            predicate: Arc::new(predicate),
+            metadata: Metadata::default(),
+        });
+        let rule_index = self.pipeline.spawn_rules.len() - 1;
+        ForkBuilder {
+            pipeline: self.pipeline,
+            rule_index,
+        }
+    }
+
+    /// Fan out to multiple targets.
+    pub fn fan_out(mut self, targets: &[&'static str]) -> FanOutBuilder<I, O, Chain> {
+        self.pipeline.spawn_rules.push(SpawnRule::FanOut {
+            targets: targets.to_vec(),
+            metadata: Metadata::default(),
+        });
+        let rule_index = self.pipeline.spawn_rules.len() - 1;
+        FanOutBuilder {
+            pipeline: self.pipeline,
+            rule_index,
+        }
+    }
+
+    /// Emit tasks dynamically.
+    pub fn emit<T, F>(mut self, target: &'static str, generator: F) -> EmitBuilder<I, O, Chain>
+    where
+        T: Serialize + 'static,
+        F: Fn(&O) -> Vec<T> + Send + Sync + 'static,
+    {
+        self.pipeline.spawn_rules.push(SpawnRule::Dynamic {
+            target,
+            generator: Arc::new(move |output| {
+                generator(output)
+                    .into_iter()
+                    .filter_map(|item| serde_json::to_value(item).ok())
+                    .collect()
+            }),
+            metadata: Metadata::default(),
+        });
+        let rule_index = self.pipeline.spawn_rules.len() - 1;
+        EmitBuilder {
+            pipeline: self.pipeline,
+            rule_index,
+        }
+    }
+
+    /// Set retry policy.
+    pub fn with_retry(mut self, policy: RetryPolicy) -> Self {
+        self.pipeline.retry_policy = policy;
+        self
+    }
+
+    /// Set recorder.
+    pub fn with_recorder<R: Recorder + 'static>(mut self, recorder: R) -> Self {
+        self.pipeline.recorder = Arc::new(recorder);
+        self
     }
 
     /// Build the pipeline.
