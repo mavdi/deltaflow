@@ -54,14 +54,18 @@ pub enum SpawnRule<O> {
     Fork {
         target: &'static str,
         predicate: ForkPredicate<O>,
-        description: String,
+        metadata: Metadata,
     },
     /// Static fan-out: always spawn to these targets.
-    FanOut { targets: Vec<&'static str> },
+    FanOut {
+        targets: Vec<&'static str>,
+        metadata: Metadata,
+    },
     /// Dynamic spawn: generate tasks from output.
     Dynamic {
         target: &'static str,
         generator: SpawnGenerator<O>,
+        metadata: Metadata,
     },
 }
 
@@ -442,6 +446,7 @@ where
                     .filter_map(|item| serde_json::to_value(item).ok())
                     .collect()
             }),
+            metadata: Metadata::default(),
         });
         self
     }
@@ -467,7 +472,7 @@ where
         self.spawn_rules.push(SpawnRule::Fork {
             target,
             predicate: Arc::new(predicate),
-            description: format!("fork to {}", target),
+            metadata: Metadata::default(),
         });
         self
     }
@@ -485,7 +490,7 @@ where
         self.spawn_rules.push(SpawnRule::Fork {
             target,
             predicate: Arc::new(predicate),
-            description: description.to_string(),
+            metadata: Metadata::new().with_description(description),
         });
         self
     }
@@ -496,6 +501,7 @@ where
     pub fn fan_out(mut self, targets: &[&'static str]) -> Self {
         self.spawn_rules.push(SpawnRule::FanOut {
             targets: targets.to_vec(),
+            metadata: Metadata::default(),
         });
         self
     }
@@ -589,7 +595,7 @@ where
         self.pipeline.spawn_rules.push(SpawnRule::Fork {
             target,
             predicate: Arc::new(predicate),
-            description: format!("fork to {}", target),
+            metadata: Metadata::default(),
         });
         self
     }
@@ -607,7 +613,7 @@ where
         self.pipeline.spawn_rules.push(SpawnRule::Fork {
             target,
             predicate: Arc::new(predicate),
-            description: description.to_string(),
+            metadata: Metadata::new().with_description(description),
         });
         self
     }
@@ -617,6 +623,7 @@ where
     pub fn fan_out(mut self, targets: &[&'static str]) -> Self {
         self.pipeline.spawn_rules.push(SpawnRule::FanOut {
             targets: targets.to_vec(),
+            metadata: Metadata::default(),
         });
         self
     }
@@ -635,6 +642,7 @@ where
                     .filter_map(|item| serde_json::to_value(item).ok())
                     .collect()
             }),
+            metadata: Metadata::default(),
         });
         self
     }
@@ -833,14 +841,14 @@ where
                         }
                     }
                 }
-                SpawnRule::FanOut { targets } => {
+                SpawnRule::FanOut { targets, .. } => {
                     if let Ok(value) = serde_json::to_value(output) {
                         for target in targets {
                             spawned.push((*target, value.clone()));
                         }
                     }
                 }
-                SpawnRule::Dynamic { target, generator } => {
+                SpawnRule::Dynamic { target, generator, .. } => {
                     for input in generator(output) {
                         spawned.push((*target, input));
                     }
@@ -878,25 +886,28 @@ where
             match rule {
                 SpawnRule::Fork {
                     target,
-                    description,
+                    metadata,
                     ..
                 } => {
                     forks.push(ForkNode {
                         target_pipeline: target.to_string(),
-                        condition: description.clone(),
-                        metadata: Metadata::default(),
+                        condition: metadata
+                            .description
+                            .clone()
+                            .unwrap_or_else(|| format!("fork to {}", target)),
+                        metadata: metadata.clone(),
                     });
                 }
-                SpawnRule::FanOut { targets } => {
+                SpawnRule::FanOut { targets, metadata } => {
                     fan_outs.push(FanOutNode {
                         targets: targets.iter().map(|s| s.to_string()).collect(),
-                        metadata: Metadata::default(),
+                        metadata: metadata.clone(),
                     });
                 }
-                SpawnRule::Dynamic { target, .. } => {
+                SpawnRule::Dynamic { target, metadata, .. } => {
                     emits.push(EmitNode {
                         target_pipeline: target.to_string(),
-                        metadata: Metadata::default(),
+                        metadata: metadata.clone(),
                     });
                 }
             }
