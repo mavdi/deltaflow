@@ -115,13 +115,13 @@ let pipeline = Pipeline::new("market_data")
     .fork_when(|d| d.asset_class == "equity", "equity_analysis")
 
     // Conditional fork with description (for visualization)
-    .fork_when_desc(|d| d.priority == "high", "priority_queue", "high_priority")
+    .fork_when(|d| d.priority == "high", "priority_queue").desc("high_priority")
 
     // Static fan-out - always sends to all targets
     .fan_out(&["ml_pipeline", "stats_pipeline"])
 
     // Dynamic spawn - generate tasks from output
-    .spawn_from("alerts", |d| {
+    .emit("alerts", |d| {
         if d.price_change > 0.05 {
             vec![Alert { symbol: d.symbol.clone() }]
         } else {

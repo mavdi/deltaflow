@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.5.0] - 2025-12-18
+
+### Breaking Changes
+- Removed `fork_when_desc()` - use chainable `.desc()` pattern instead: `.fork_when(...).desc(...)`
+- Removed `spawn_from()` - use `emit()` instead for generating dynamic tasks
+- Removed deprecated `spawns()` method
+
+### Added
+- `emit()` - New method for dynamic task generation, replacing `spawn_from()`
+- Chainable `.desc()` method for adding descriptions to fork nodes for visualization
+
+### Migration Guide
+- Replace `fork_when_desc(pred, target, desc)` with `fork_when(pred, target).desc(desc)`
+- Replace `spawn_from(target, fn)` with `emit(target, fn)`
+- Replace deprecated `spawns(target, fn)` with `emit(target, fn)`
+
 ## [0.4.0] - 2025-12-17
 
 ### Added

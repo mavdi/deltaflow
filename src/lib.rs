@@ -37,9 +37,9 @@
 //! let pipeline = Pipeline::new("router")
 //!     .start_with(ValidateStep)
 //!     .fork_when(|data| data.priority == "high", "fast_track")
-//!     .fork_when_desc(|data| data.needs_review, "review", "needs_review")
+//!     .fork_when(|data| data.needs_review, "review").desc("needs_review")
 //!     .fan_out(&["analytics", "archival"])
-//!     .spawn_from("notifications", |data| vec![Notification::from(data)])
+//!     .emit("notifications", |data| vec![Notification::from(data)])
 //!     .build();
 //! ```
 //!

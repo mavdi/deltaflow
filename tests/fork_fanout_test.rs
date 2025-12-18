@@ -160,7 +160,7 @@ async fn test_combined_fork_fanout_spawn_from() {
             "crypto_pipeline",
         )
         .fan_out(&["audit_pipeline"])
-        .spawn_from("alert_pipeline", |d: &MarketData| {
+        .emit("alert_pipeline", |d: &MarketData| {
             if d.price > 40000.0 {
                 vec![AlertRequest {
                     symbol: d.symbol.clone(),
@@ -246,11 +246,11 @@ async fn test_graph_serializes_to_json() {
 async fn test_fork_when_with_description() {
     let pipeline = Pipeline::new("market_data")
         .start_with(NormalizeStep)
-        .fork_when_desc(
+        .fork_when(
             |d: &MarketData| d.asset_class == "crypto",
             "crypto_pipeline",
-            "routes crypto assets",
         )
+        .desc("routes crypto assets")
         .with_recorder(NoopRecorder)
         .build();
 

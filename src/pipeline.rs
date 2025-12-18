@@ -429,38 +429,6 @@ where
         self
     }
 
-    /// Declare follow-up tasks to spawn on successful completion.
-    ///
-    /// The generator function receives the pipeline output and returns
-    /// a list of inputs to enqueue to the target pipeline.
-    pub fn spawn_from<T, F>(mut self, target: &'static str, f: F) -> Self
-    where
-        T: Serialize + 'static,
-        F: Fn(&O) -> Vec<T> + Send + Sync + 'static,
-    {
-        self.spawn_rules.push(SpawnRule::Dynamic {
-            target,
-            generator: Arc::new(move |output| {
-                f(output)
-                    .into_iter()
-                    .filter_map(|item| serde_json::to_value(item).ok())
-                    .collect()
-            }),
-            metadata: Metadata::default(),
-        });
-        self
-    }
-
-    /// Keep old name as alias for backward compatibility.
-    #[deprecated(since = "0.4.0", note = "Use spawn_from instead")]
-    pub fn spawns<T, F>(self, target: &'static str, f: F) -> Self
-    where
-        T: Serialize + 'static,
-        F: Fn(&O) -> Vec<T> + Send + Sync + 'static,
-    {
-        self.spawn_from(target, f)
-    }
-
     /// Conditionally fork to a target pipeline when predicate returns true.
     ///
     /// The output is serialized and sent to the target pipeline.
@@ -473,24 +441,6 @@ where
             target,
             predicate: Arc::new(predicate),
             metadata: Metadata::default(),
-        });
-        self
-    }
-
-    /// Conditionally fork with a custom description for visualization.
-    pub fn fork_when_desc<F>(
-        mut self,
-        predicate: F,
-        target: &'static str,
-        description: &str,
-    ) -> Self
-    where
-        F: Fn(&O) -> bool + Send + Sync + 'static,
-    {
-        self.spawn_rules.push(SpawnRule::Fork {
-            target,
-            predicate: Arc::new(predicate),
-            metadata: Metadata::new().with_description(description),
         });
         self
     }
@@ -603,24 +553,6 @@ where
         }
     }
 
-    /// Conditionally fork with a custom description for visualization.
-    pub fn fork_when_desc<F>(
-        mut self,
-        predicate: F,
-        target: &'static str,
-        description: &str,
-    ) -> Self
-    where
-        F: Fn(&O) -> bool + Send + Sync + 'static,
-    {
-        self.pipeline.spawn_rules.push(SpawnRule::Fork {
-            target,
-            predicate: Arc::new(predicate),
-            metadata: Metadata::new().with_description(description),
-        });
-        self
-    }
-
     /// Fan out to multiple targets.
     pub fn fan_out(mut self, targets: &[&'static str]) -> FanOutBuilder<I, O, Chain> {
         self.pipeline.spawn_rules.push(SpawnRule::FanOut {
@@ -632,25 +564,6 @@ where
             pipeline: self.pipeline,
             rule_index,
         }
-    }
-
-    /// Declare follow-up tasks to spawn on successful completion.
-    pub fn spawn_from<T, F>(mut self, target: &'static str, f: F) -> Self
-    where
-        T: Serialize + 'static,
-        F: Fn(&O) -> Vec<T> + Send + Sync + 'static,
-    {
-        self.pipeline.spawn_rules.push(SpawnRule::Dynamic {
-            target,
-            generator: Arc::new(move |output| {
-                f(output)
-                    .into_iter()
-                    .filter_map(|item| serde_json::to_value(item).ok())
-                    .collect()
-            }),
-            metadata: Metadata::default(),
-        });
-        self
     }
 
     /// Alias for spawn_from (emit).
