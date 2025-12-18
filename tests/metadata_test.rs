@@ -1,6 +1,7 @@
 //! Tests for Metadata struct and builder pattern.
 
-use deltaflow::{EmitNode, FanOutNode, ForkNode, Metadata, StepNode};
+use async_trait::async_trait;
+use deltaflow::{EmitNode, FanOutNode, ForkNode, Metadata, NoopRecorder, Pipeline, Step, StepError, StepNode};
 
 #[test]
 fn test_metadata_default_is_empty() {
@@ -75,4 +76,98 @@ fn test_emit_node_has_metadata() {
         metadata: Metadata::new().with_description("emit reason"),
     };
     assert_eq!(node.metadata.description, Some("emit reason".to_string()));
+}
+
+struct DummyStep;
+
+#[async_trait]
+impl Step for DummyStep {
+    type Input = String;
+    type Output = String;
+    fn name(&self) -> &'static str {
+        "dummy"
+    }
+    async fn execute(&self, input: Self::Input) -> Result<Self::Output, StepError> {
+        Ok(input)
+    }
+}
+
+#[test]
+fn test_step_builder_desc() {
+    let pipeline = Pipeline::new("test")
+        .start_with(DummyStep)
+        .desc("first step")
+        .then(DummyStep)
+        .desc("second step")
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let graph = pipeline.to_graph();
+    assert_eq!(
+        graph.steps[0].metadata.description,
+        Some("first step".to_string())
+    );
+    assert_eq!(
+        graph.steps[1].metadata.description,
+        Some("second step".to_string())
+    );
+}
+
+#[test]
+fn test_step_builder_tag() {
+    let pipeline = Pipeline::new("test")
+        .start_with(DummyStep)
+        .tag("priority", "high")
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let graph = pipeline.to_graph();
+    assert_eq!(
+        graph.steps[0].metadata.tags.get("priority"),
+        Some(&"high".to_string())
+    );
+}
+
+#[test]
+fn test_step_builder_chain_metadata() {
+    let pipeline = Pipeline::new("test")
+        .start_with(DummyStep)
+        .desc("step one")
+        .tag("type", "input")
+        .then(DummyStep)
+        .desc("step two")
+        .tag("type", "output")
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let graph = pipeline.to_graph();
+    assert_eq!(
+        graph.steps[0].metadata.description,
+        Some("step one".to_string())
+    );
+    assert_eq!(
+        graph.steps[0].metadata.tags.get("type"),
+        Some(&"input".to_string())
+    );
+    assert_eq!(
+        graph.steps[1].metadata.description,
+        Some("step two".to_string())
+    );
+    assert_eq!(
+        graph.steps[1].metadata.tags.get("type"),
+        Some(&"output".to_string())
+    );
+}
+
+#[test]
+fn test_step_without_metadata_has_empty_metadata() {
+    let pipeline = Pipeline::new("test")
+        .start_with(DummyStep)
+        .then(DummyStep)
+        .with_recorder(NoopRecorder)
+        .build();
+
+    let graph = pipeline.to_graph();
+    assert!(graph.steps[0].metadata.description.is_none());
+    assert!(graph.steps[1].metadata.description.is_none());
 }
