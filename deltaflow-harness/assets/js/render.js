@@ -151,17 +151,17 @@ function renderEdges(container, g, backEdges) {
     if (isBackEdge) {
       strokeColor = COLORS.edgeCycle;
       strokeWidth = EDGE.forkWidth;
-      strokeDash = 'none';
+      strokeDash = '4,3';
       marker = 'url(#arrow-cycle)';
     } else if (isSequential) {
       strokeColor = COLORS.edgeSequential;
       strokeWidth = EDGE.sequentialWidth;
-      strokeDash = '4,3';
+      strokeDash = 'none';
       marker = 'url(#arrow-sequential)';
     } else {
       strokeColor = COLORS.edgeFork;
       strokeWidth = EDGE.forkWidth;
-      strokeDash = 'none';
+      strokeDash = '4,3';
       marker = 'url(#arrow-fork)';
     }
 
