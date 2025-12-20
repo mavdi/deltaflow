@@ -42,6 +42,14 @@ pub trait TaskStore: Send + Sync {
     /// Enqueue a task for a pipeline with JSON input.
     async fn enqueue(&self, pipeline: &str, input: serde_json::Value) -> Result<TaskId, TaskError>;
 
+    /// Enqueue a task scheduled for a future time.
+    async fn enqueue_scheduled(
+        &self,
+        pipeline: &str,
+        input: serde_json::Value,
+        scheduled_for: DateTime<Utc>,
+    ) -> Result<TaskId, TaskError>;
+
     /// Claim up to `limit` pending tasks atomically.
     async fn claim(&self, limit: usize) -> Result<Vec<StoredTask>, TaskError>;
 

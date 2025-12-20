@@ -94,6 +94,32 @@ impl TaskStore for SqliteTaskStore {
         Ok(TaskId(result))
     }
 
+    async fn enqueue_scheduled(
+        &self,
+        pipeline: &str,
+        input: serde_json::Value,
+        scheduled_for: DateTime<Utc>,
+    ) -> Result<TaskId, TaskError> {
+        let input_str = serde_json::to_string(&input)
+            .map_err(|e| TaskError::SerializationError(e.to_string()))?;
+
+        let result = sqlx::query_scalar::<_, i64>(
+            r#"
+            INSERT INTO delta_tasks (pipeline, input, status, scheduled_for)
+            VALUES (?, ?, 'pending', ?)
+            RETURNING id
+            "#,
+        )
+        .bind(pipeline)
+        .bind(input_str)
+        .bind(scheduled_for.to_rfc3339())
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| TaskError::StorageError(e.to_string()))?;
+
+        Ok(TaskId(result))
+    }
+
     async fn claim(&self, limit: usize) -> Result<Vec<StoredTask>, TaskError> {
         // SQLite doesn't support UPDATE ... LIMIT with RETURNING directly,
         // so we do it in two steps within a transaction
