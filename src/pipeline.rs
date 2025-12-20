@@ -110,6 +110,8 @@ pub struct FanOutNode {
 #[derive(Debug, Clone, Serialize)]
 pub struct EmitNode {
     pub target_pipeline: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delay_seconds: Option<u64>,
     #[serde(flatten)]
     pub metadata: Metadata,
 }
@@ -1292,9 +1294,10 @@ where
                         metadata: metadata.clone(),
                     });
                 }
-                SpawnRule::Dynamic { target, metadata, .. } => {
+                SpawnRule::Dynamic { target, metadata, delay, .. } => {
                     emits.push(EmitNode {
                         target_pipeline: target.to_string(),
+                        delay_seconds: delay.map(|d| d.as_secs()),
                         metadata: metadata.clone(),
                     });
                 }

@@ -73,6 +73,7 @@ fn test_fan_out_node_has_metadata() {
 fn test_emit_node_has_metadata() {
     let node = EmitNode {
         target_pipeline: "target".to_string(),
+        delay_seconds: None,
         metadata: Metadata::new().with_description("emit reason"),
     };
     assert_eq!(node.metadata.description, Some("emit reason".to_string()));
