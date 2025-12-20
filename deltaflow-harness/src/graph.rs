@@ -1,12 +1,13 @@
 //! Graph transformation for the API response.
 
-use deltaflow::PipelineGraph;
+use deltaflow::{PipelineGraph, TriggerNode};
 use serde::Serialize;
 
 /// Full graph response for the API.
 #[derive(Debug, Clone, Serialize)]
 pub struct GraphResponse {
     pub pipelines: Vec<PipelineGraph>,
+    pub triggers: Vec<TriggerNode>,
     pub connections: Vec<Connection>,
 }
 
@@ -27,11 +28,26 @@ pub enum ConnectionType {
     Fork,
     FanOut,
     DynamicSpawn,
+    Trigger,
 }
 
 impl GraphResponse {
     pub fn from_graphs(graphs: Vec<PipelineGraph>) -> Self {
+        Self::from_graphs_and_triggers(graphs, Vec::new())
+    }
+
+    pub fn from_graphs_and_triggers(graphs: Vec<PipelineGraph>, triggers: Vec<TriggerNode>) -> Self {
         let mut connections = Vec::new();
+
+        // Add trigger connections
+        for trigger in &triggers {
+            connections.push(Connection {
+                from: trigger.name.clone(),
+                to: trigger.target_pipeline.clone(),
+                connection_type: ConnectionType::Trigger,
+                condition: None,
+            });
+        }
 
         for graph in &graphs {
             // Forks
@@ -69,6 +85,7 @@ impl GraphResponse {
 
         GraphResponse {
             pipelines: graphs,
+            triggers,
             connections,
         }
     }
@@ -113,6 +130,7 @@ mod tests {
         let response = GraphResponse::from_graphs(graphs);
 
         assert_eq!(response.pipelines.len(), 2);
+        assert_eq!(response.triggers.len(), 0);
         assert_eq!(response.connections.len(), 1);
         assert_eq!(response.connections[0].from, "pipeline_a");
         assert_eq!(response.connections[0].to, "pipeline_b");
