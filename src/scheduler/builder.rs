@@ -1,4 +1,4 @@
-use super::job::{PeriodicScheduler, QueryFn, RegisteredJob};
+use super::job::{PeriodicScheduler, QueryFn, RegisteredJob, RegisteredTrigger};
 use crate::runner::TaskStore;
 use serde::Serialize;
 use std::future::Future;
@@ -9,6 +9,7 @@ use std::time::Duration;
 pub struct SchedulerBuilder<S: TaskStore> {
     task_store: S,
     jobs: Vec<RegisteredJob>,
+    triggers: Vec<RegisteredTrigger>,
     pending_run_on_start: bool,
 }
 
@@ -18,6 +19,7 @@ impl<S: TaskStore + 'static> SchedulerBuilder<S> {
         Self {
             task_store,
             jobs: Vec::new(),
+            triggers: Vec::new(),
             pending_run_on_start: false,
         }
     }
@@ -69,6 +71,20 @@ impl<S: TaskStore + 'static> SchedulerBuilder<S> {
         if let Some(job) = self.jobs.last_mut() {
             job.run_on_start = run;
         }
+        self
+    }
+
+    /// Add a trigger that emits DateTime<Utc> to a pipeline on schedule.
+    ///
+    /// Unlike jobs, triggers don't run custom query functions - they simply
+    /// emit the current timestamp to the target pipeline at each interval.
+    pub fn trigger(mut self, pipeline_name: &'static str, interval: Duration) -> Self {
+        self.triggers.push(RegisteredTrigger {
+            pipeline_name,
+            interval,
+            run_on_start: self.pending_run_on_start,
+        });
+        self.pending_run_on_start = false;
         self
     }
 

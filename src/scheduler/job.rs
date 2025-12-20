@@ -18,6 +18,13 @@ pub(crate) struct RegisteredJob {
     pub run_on_start: bool,
 }
 
+/// A registered trigger configuration.
+pub struct RegisteredTrigger {
+    pub pipeline_name: &'static str,
+    pub interval: Duration,
+    pub run_on_start: bool,
+}
+
 /// Periodic scheduler that runs registered jobs at intervals.
 pub struct PeriodicScheduler<S: TaskStore> {
     task_store: Arc<S>,
