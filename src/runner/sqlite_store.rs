@@ -130,11 +130,16 @@ impl TaskStore for SqliteTaskStore {
             .map_err(|e| TaskError::StorageError(e.to_string()))?;
 
         // Get IDs of tasks to claim
+        // Note: scheduled_for is stored in RFC3339 format, which sorts correctly as text
         let ids: Vec<i64> = sqlx::query_scalar(
             r#"
             SELECT id FROM delta_tasks
             WHERE status = 'pending'
-            ORDER BY created_at
+              AND (scheduled_for IS NULL OR datetime(scheduled_for) <= datetime('now'))
+            ORDER BY
+              CASE WHEN scheduled_for IS NULL THEN 0 ELSE 1 END,
+              datetime(scheduled_for),
+              created_at
             LIMIT ?
             "#,
         )
@@ -222,8 +227,13 @@ impl TaskStore for SqliteTaskStore {
         let ids: Vec<i64> = sqlx::query_scalar(
             r#"
             SELECT id FROM delta_tasks
-            WHERE status = 'pending' AND pipeline = ?
-            ORDER BY created_at
+            WHERE status = 'pending'
+              AND pipeline = ?
+              AND (scheduled_for IS NULL OR datetime(scheduled_for) <= datetime('now'))
+            ORDER BY
+              CASE WHEN scheduled_for IS NULL THEN 0 ELSE 1 END,
+              datetime(scheduled_for),
+              created_at
             LIMIT ?
             "#,
         )
@@ -335,8 +345,13 @@ impl TaskStore for SqliteTaskStore {
         let select_query = format!(
             r#"
             SELECT id FROM delta_tasks
-            WHERE status = 'pending' AND pipeline NOT IN ({})
-            ORDER BY created_at
+            WHERE status = 'pending'
+              AND pipeline NOT IN ({})
+              AND (scheduled_for IS NULL OR datetime(scheduled_for) <= datetime('now'))
+            ORDER BY
+              CASE WHEN scheduled_for IS NULL THEN 0 ELSE 1 END,
+              datetime(scheduled_for),
+              created_at
             LIMIT ?
             "#,
             exclude_clause

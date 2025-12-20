@@ -172,3 +172,42 @@ async fn test_recover_orphans() {
     let tasks = store.claim(10).await.unwrap();
     assert_eq!(tasks.len(), 3, "Should claim all 3 tasks after recovery");
 }
+
+#[tokio::test]
+async fn test_claim_respects_scheduled_for() {
+    let store = setup_store().await;
+
+    let now = chrono::Utc::now();
+    let future = now + chrono::Duration::hours(1);
+    let past = now - chrono::Duration::hours(1);
+
+    // Enqueue task scheduled for the future - should NOT be claimed
+    store
+        .enqueue_scheduled("test", serde_json::json!({"id": "future"}), future)
+        .await
+        .unwrap();
+
+    // Enqueue task scheduled for the past - should be claimed
+    store
+        .enqueue_scheduled("test", serde_json::json!({"id": "past"}), past)
+        .await
+        .unwrap();
+
+    // Enqueue immediate task (no scheduled_for) - should be claimed
+    store
+        .enqueue("test", serde_json::json!({"id": "immediate"}))
+        .await
+        .unwrap();
+
+    // Claim should only get past and immediate
+    let claimed = store.claim(10).await.unwrap();
+    assert_eq!(claimed.len(), 2);
+
+    let ids: Vec<&str> = claimed
+        .iter()
+        .map(|t| t.input.get("id").unwrap().as_str().unwrap())
+        .collect();
+    assert!(ids.contains(&"past"));
+    assert!(ids.contains(&"immediate"));
+    assert!(!ids.contains(&"future"));
+}
