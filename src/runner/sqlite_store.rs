@@ -29,7 +29,8 @@ impl SqliteTaskStore {
                 error_message TEXT,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 started_at TEXT,
-                completed_at TEXT
+                completed_at TEXT,
+                scheduled_for TEXT
             )
             "#,
         )
@@ -51,6 +52,16 @@ impl SqliteTaskStore {
             r#"
             CREATE INDEX IF NOT EXISTS idx_delta_tasks_pipeline
             ON delta_tasks(pipeline, status)
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| TaskError::StorageError(e.to_string()))?;
+
+        sqlx::query(
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_delta_tasks_scheduled
+            ON delta_tasks(status, scheduled_for)
             "#,
         )
         .execute(&self.pool)
