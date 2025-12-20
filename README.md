@@ -1,5 +1,8 @@
 # Deltaflow
 
+> **Warning**
+> This is an experimental project under active development. APIs may change without notice. Not recommended for production use.
+
 The embeddable workflow engine.
 
 Type-safe, Elixir-inspired pipelines that run in your process. No infrastructure required.
