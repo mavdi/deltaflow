@@ -1,3 +1,4 @@
+use super::graph::TriggerNode;
 use super::job::{PeriodicScheduler, QueryFn, RegisteredJob, RegisteredTrigger};
 use crate::runner::TaskStore;
 use serde::Serialize;
@@ -86,6 +87,19 @@ impl<S: TaskStore + 'static> SchedulerBuilder<S> {
         });
         self.pending_run_on_start = false;
         self
+    }
+
+    /// Get trigger nodes for visualization.
+    pub fn get_trigger_nodes(&self) -> Vec<TriggerNode> {
+        self.triggers
+            .iter()
+            .map(|t| TriggerNode {
+                name: format!("{}_trigger", t.pipeline_name),
+                target_pipeline: t.pipeline_name.to_string(),
+                interval_seconds: t.interval.as_secs(),
+                run_on_start: t.run_on_start,
+            })
+            .collect()
     }
 
     /// Build the scheduler.

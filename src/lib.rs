@@ -92,4 +92,4 @@ pub use runner::{
 };
 
 #[cfg(feature = "sqlite")]
-pub use scheduler::{PeriodicScheduler, SchedulerBuilder};
+pub use scheduler::{PeriodicScheduler, SchedulerBuilder, TriggerNode};
