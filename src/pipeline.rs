@@ -66,6 +66,7 @@ pub enum SpawnRule<O> {
         target: &'static str,
         generator: SpawnGenerator<O>,
         metadata: Metadata,
+        delay: Option<std::time::Duration>,
     },
 }
 
@@ -581,6 +582,7 @@ where
                     .collect()
             }),
             metadata: Metadata::default(),
+            delay: None,
         });
         let rule_index = self.pipeline.spawn_rules.len() - 1;
         EmitBuilder {
@@ -716,6 +718,7 @@ where
                     .collect()
             }),
             metadata: Metadata::default(),
+            delay: None,
         });
         let rule_index = self.pipeline.spawn_rules.len() - 1;
         EmitBuilder {
@@ -863,6 +866,7 @@ where
                     .collect()
             }),
             metadata: Metadata::default(),
+            delay: None,
         });
         let rule_index = self.pipeline.spawn_rules.len() - 1;
         EmitBuilder {
@@ -912,6 +916,16 @@ where
     O: Send + Sync + Clone + 'static,
     Chain: StepChain<I, O> + Send + Sync + 'static,
 {
+    /// Schedule the emitted tasks for later.
+    pub fn delay(mut self, duration: std::time::Duration) -> Self {
+        if let Some(SpawnRule::Dynamic { delay, .. }) =
+            self.pipeline.spawn_rules.get_mut(self.rule_index)
+        {
+            *delay = Some(duration);
+        }
+        self
+    }
+
     /// Add a description to this emit.
     pub fn desc(mut self, description: &str) -> Self {
         if let Some(SpawnRule::Dynamic { metadata, .. }) =
@@ -1010,6 +1024,7 @@ where
                     .collect()
             }),
             metadata: Metadata::default(),
+            delay: None,
         });
         let rule_index = self.pipeline.spawn_rules.len() - 1;
         EmitBuilder {
