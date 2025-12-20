@@ -25,6 +25,7 @@ pub trait ErasedPipeline: Send + Sync {
 pub struct SpawnedTask {
     pub pipeline: &'static str,
     pub input: serde_json::Value,
+    pub delay: Option<std::time::Duration>,
 }
 
 #[async_trait]
@@ -54,7 +55,7 @@ where
         let spawned: Vec<SpawnedTask> = self
             .get_spawned(&output)
             .into_iter()
-            .map(|(pipeline, input)| SpawnedTask { pipeline, input })
+            .map(|(pipeline, input, delay)| SpawnedTask { pipeline, input, delay })
             .collect();
 
         Ok(spawned)

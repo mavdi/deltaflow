@@ -111,7 +111,7 @@ async fn test_fan_out_spawns_to_all_targets() {
 
     assert_eq!(spawned.len(), 3);
 
-    let targets: Vec<&str> = spawned.iter().map(|(t, _)| *t).collect();
+    let targets: Vec<&str> = spawned.iter().map(|(t, _, _)| *t).collect();
     assert!(targets.contains(&"ml_pipeline"));
     assert!(targets.contains(&"stats_pipeline"));
     assert!(targets.contains(&"alerts_pipeline"));
@@ -145,7 +145,7 @@ async fn test_multiple_forks_all_matching_fire() {
     // All three predicates match
     assert_eq!(spawned.len(), 3);
 
-    let targets: Vec<&str> = spawned.iter().map(|(t, _)| *t).collect();
+    let targets: Vec<&str> = spawned.iter().map(|(t, _, _)| *t).collect();
     assert!(targets.contains(&"crypto_pipeline"));
     assert!(targets.contains(&"high_value_pipeline"));
     assert!(targets.contains(&"short_symbol_pipeline"));
@@ -185,7 +185,7 @@ async fn test_combined_fork_fanout_spawn_from() {
     // crypto_pipeline (fork matches) + audit_pipeline (fan-out) + alert_pipeline (spawn_from)
     assert_eq!(spawned.len(), 3);
 
-    let targets: Vec<&str> = spawned.iter().map(|(t, _)| *t).collect();
+    let targets: Vec<&str> = spawned.iter().map(|(t, _, _)| *t).collect();
     assert!(targets.contains(&"crypto_pipeline"));
     assert!(targets.contains(&"audit_pipeline"));
     assert!(targets.contains(&"alert_pipeline"));

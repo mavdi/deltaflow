@@ -89,7 +89,15 @@ impl<S: TaskStore + 'static> Runner<S> {
                     match result {
                         Ok(spawned) => {
                             for sp in spawned {
-                                let _ = store.enqueue(sp.pipeline, sp.input).await;
+                                match sp.delay {
+                                    Some(duration) => {
+                                        let scheduled_for = chrono::Utc::now() + chrono::Duration::from_std(duration).unwrap();
+                                        let _ = store.enqueue_scheduled(sp.pipeline, sp.input, scheduled_for).await;
+                                    }
+                                    None => {
+                                        let _ = store.enqueue(sp.pipeline, sp.input).await;
+                                    }
+                                }
                             }
                             let _ = store.complete(task.id).await;
                         }

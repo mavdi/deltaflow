@@ -1217,7 +1217,7 @@ where
     }
 
     /// Get spawned tasks for the given output.
-    pub fn get_spawned(&self, output: &O) -> Vec<(&'static str, serde_json::Value)> {
+    pub fn get_spawned(&self, output: &O) -> Vec<(&'static str, serde_json::Value, Option<std::time::Duration>)> {
         let mut spawned = Vec::new();
 
         for rule in &self.spawn_rules {
@@ -1227,20 +1227,20 @@ where
                 } => {
                     if predicate(output) {
                         if let Ok(value) = serde_json::to_value(output) {
-                            spawned.push((*target, value));
+                            spawned.push((*target, value, None));
                         }
                     }
                 }
                 SpawnRule::FanOut { targets, .. } => {
                     if let Ok(value) = serde_json::to_value(output) {
                         for target in targets {
-                            spawned.push((*target, value.clone()));
+                            spawned.push((*target, value.clone(), None));
                         }
                     }
                 }
-                SpawnRule::Dynamic { target, generator, .. } => {
+                SpawnRule::Dynamic { target, generator, delay, .. } => {
                     for input in generator(output) {
-                        spawned.push((*target, input));
+                        spawned.push((*target, input, *delay));
                     }
                 }
             }
