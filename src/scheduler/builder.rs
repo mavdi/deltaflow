@@ -90,6 +90,6 @@ impl<S: TaskStore + 'static> SchedulerBuilder<S> {
 
     /// Build the scheduler.
     pub fn build(self) -> PeriodicScheduler<S> {
-        PeriodicScheduler::new(self.task_store, self.jobs)
+        PeriodicScheduler::new(self.task_store, self.jobs, self.triggers)
     }
 }
