@@ -257,9 +257,9 @@ async fn test_multiple_fork_predicates_execute() {
     let main_pipeline = Pipeline::new("main")
         .start_with(PassthroughStep)
         // First predicate - matches all items
-        .fork_when(|_: &TestItem| true, "target")
+        .fork_when(|result| result.is_ok(), "target")
         // Second predicate - also matches all items
-        .fork_when(|_: &TestItem| true, "fallback")
+        .fork_when(|result| result.is_ok(), "fallback")
         .with_recorder(NoopRecorder)
         .build();
 

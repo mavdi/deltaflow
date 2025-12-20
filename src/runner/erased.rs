@@ -47,16 +47,16 @@ where
         let typed_input: I = serde_json::from_value(input)
             .map_err(|e| TaskError::DeserializationError(e.to_string()))?;
 
-        let output = self
-            .run(typed_input)
-            .await
-            .map_err(|e| TaskError::PipelineError(e.to_string()))?;
+        let result = self.run(typed_input).await;
 
         let spawned: Vec<SpawnedTask> = self
-            .get_spawned(&output)
+            .get_spawned_from_result(&result)
             .into_iter()
             .map(|(pipeline, input, delay)| SpawnedTask { pipeline, input, delay })
             .collect();
+
+        // Return the result (error if pipeline failed)
+        result.map_err(|e| TaskError::PipelineError(e.to_string()))?;
 
         Ok(spawned)
     }

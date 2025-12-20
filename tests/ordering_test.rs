@@ -219,11 +219,11 @@ async fn test_late_arrival_routing() {
     let main_pipeline = Pipeline::new("main")
         .start_with(TimestampPassthroughStep)
         .fork_when(
-            move |item: &TimestampedItem| item.timestamp >= cutoff,
+            move |result| result.as_ref().map_or(false, |item| item.timestamp >= cutoff),
             "normal",
         )
         .fork_when(
-            move |item: &TimestampedItem| item.timestamp < cutoff,
+            move |result| result.as_ref().map_or(false, |item| item.timestamp < cutoff),
             "late_handler",
         )
         .with_recorder(NoopRecorder)
@@ -335,11 +335,11 @@ async fn test_priority_routing() {
     let main_pipeline = Pipeline::new("main")
         .start_with(PriorityPassthroughStep)
         .fork_when(
-            |item: &PriorityItem| item.priority == Priority::High,
+            |result| result.as_ref().map_or(false, |item| item.priority == Priority::High),
             "urgent",
         )
         .fork_when(
-            |item: &PriorityItem| item.priority == Priority::Normal,
+            |result| result.as_ref().map_or(false, |item| item.priority == Priority::Normal),
             "standard",
         )
         .with_recorder(NoopRecorder)
@@ -459,20 +459,24 @@ async fn test_batch_boundary_routing() {
         .start_with(BatchPassthroughStep)
         // First batch seen goes to route_a, alternating
         .fork_when(
-            move |item: &BatchedItem| {
-                let mut routes = futures::executor::block_on(batch_routes_a.lock());
-                let current_len = routes.len();
-                let route = routes
-                    .entry(item.batch_id.clone())
-                    .or_insert_with(|| if current_len % 2 == 0 { "route_a" } else { "route_b" });
-                *route == "route_a"
+            move |result| {
+                result.as_ref().map_or(false, |item| {
+                    let mut routes = futures::executor::block_on(batch_routes_a.lock());
+                    let current_len = routes.len();
+                    let route = routes
+                        .entry(item.batch_id.clone())
+                        .or_insert_with(|| if current_len % 2 == 0 { "route_a" } else { "route_b" });
+                    *route == "route_a"
+                })
             },
             "route_a",
         )
         .fork_when(
-            move |item: &BatchedItem| {
-                let routes = futures::executor::block_on(batch_routes_b.lock());
-                routes.get(&item.batch_id).map_or(false, |r| *r == "route_b")
+            move |result| {
+                result.as_ref().map_or(false, |item| {
+                    let routes = futures::executor::block_on(batch_routes_b.lock());
+                    routes.get(&item.batch_id).map_or(false, |r| *r == "route_b")
+                })
             },
             "route_b",
         )

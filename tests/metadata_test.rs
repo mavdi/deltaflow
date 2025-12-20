@@ -177,7 +177,7 @@ fn test_step_without_metadata_has_empty_metadata() {
 fn test_fork_builder_desc() {
     let pipeline = Pipeline::new("test")
         .start_with(DummyStep)
-        .fork_when(|_: &String| true, "target")
+        .fork_when(|result| result.is_ok(), "target")
         .desc("condition met")
         .with_recorder(NoopRecorder)
         .build();
@@ -194,7 +194,7 @@ fn test_fork_builder_desc() {
 fn test_fork_builder_tag() {
     let pipeline = Pipeline::new("test")
         .start_with(DummyStep)
-        .fork_when(|_: &String| true, "target")
+        .fork_when(|result| result.is_ok(), "target")
         .tag("route", "primary")
         .with_recorder(NoopRecorder)
         .build();
@@ -242,7 +242,7 @@ fn test_fan_out_builder_desc() {
 fn test_chained_spawn_builders() {
     let pipeline = Pipeline::new("test")
         .start_with(DummyStep)
-        .fork_when(|_: &String| true, "t1")
+        .fork_when(|result| result.is_ok(), "t1")
         .desc("fork")
         .fan_out(&["t2"])
         .desc("fanout")

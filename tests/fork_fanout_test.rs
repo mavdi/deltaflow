@@ -50,7 +50,7 @@ async fn test_fork_when_predicate_matches() {
     let pipeline = Pipeline::new("market_data")
         .start_with(NormalizeStep)
         .fork_when(
-            |d: &MarketData| d.asset_class == "crypto",
+            |result| result.as_ref().map_or(false, |d| d.asset_class == "crypto"),
             "crypto_pipeline",
         )
         .with_recorder(NoopRecorder)
@@ -74,7 +74,7 @@ async fn test_fork_when_predicate_does_not_match() {
     let pipeline = Pipeline::new("market_data")
         .start_with(NormalizeStep)
         .fork_when(
-            |d: &MarketData| d.asset_class == "crypto",
+            |result| result.as_ref().map_or(false, |d| d.asset_class == "crypto"),
             "crypto_pipeline",
         )
         .with_recorder(NoopRecorder)
@@ -122,12 +122,12 @@ async fn test_multiple_forks_all_matching_fire() {
     let pipeline = Pipeline::new("market_data")
         .start_with(NormalizeStep)
         .fork_when(
-            |d: &MarketData| d.asset_class == "crypto",
+            |result| result.as_ref().map_or(false, |d| d.asset_class == "crypto"),
             "crypto_pipeline",
         )
-        .fork_when(|d: &MarketData| d.price > 10000.0, "high_value_pipeline")
+        .fork_when(|result| result.as_ref().map_or(false, |d| d.price > 10000.0), "high_value_pipeline")
         .fork_when(
-            |d: &MarketData| d.symbol.len() <= 4,
+            |result| result.as_ref().map_or(false, |d| d.symbol.len() <= 4),
             "short_symbol_pipeline",
         )
         .with_recorder(NoopRecorder)
@@ -156,7 +156,7 @@ async fn test_combined_fork_fanout_spawn_from() {
     let pipeline = Pipeline::new("market_data")
         .start_with(NormalizeStep)
         .fork_when(
-            |d: &MarketData| d.asset_class == "crypto",
+            |result| result.as_ref().map_or(false, |d| d.asset_class == "crypto"),
             "crypto_pipeline",
         )
         .fan_out(&["audit_pipeline"])
@@ -196,7 +196,7 @@ async fn test_to_graph_exports_structure() {
     let pipeline = Pipeline::new("market_data")
         .start_with(NormalizeStep)
         .fork_when(
-            |d: &MarketData| d.asset_class == "crypto",
+            |result| result.as_ref().map_or(false, |d| d.asset_class == "crypto"),
             "crypto_pipeline",
         )
         .fan_out(&["ml_pipeline", "stats_pipeline"])
@@ -224,7 +224,7 @@ async fn test_graph_serializes_to_json() {
     let pipeline = Pipeline::new("market_data")
         .start_with(NormalizeStep)
         .fork_when(
-            |d: &MarketData| d.asset_class == "crypto",
+            |result| result.as_ref().map_or(false, |d| d.asset_class == "crypto"),
             "crypto_pipeline",
         )
         .fan_out(&["ml_pipeline"])
@@ -247,7 +247,7 @@ async fn test_fork_when_with_description() {
     let pipeline = Pipeline::new("market_data")
         .start_with(NormalizeStep)
         .fork_when(
-            |d: &MarketData| d.asset_class == "crypto",
+            |result| result.as_ref().map_or(false, |d| d.asset_class == "crypto"),
             "crypto_pipeline",
         )
         .desc("routes crypto assets")
@@ -307,7 +307,7 @@ async fn test_runner_executes_forked_tasks() {
     let main_pipeline = Pipeline::new("market_data")
         .start_with(NormalizeStep)
         .fork_when(
-            |d: &MarketData| d.asset_class == "crypto",
+            |result| result.as_ref().map_or(false, |d| d.asset_class == "crypto"),
             "crypto_pipeline",
         )
         .with_recorder(NoopRecorder)
@@ -458,7 +458,7 @@ async fn test_fork_to_unknown_pipeline_fails_gracefully() {
 
     let main_pipeline = Pipeline::new("market_data")
         .start_with(NormalizeStep)
-        .fork_when(|_: &MarketData| true, "nonexistent_pipeline")
+        .fork_when(|result| result.is_ok(), "nonexistent_pipeline")
         .with_recorder(NoopRecorder)
         .build();
 

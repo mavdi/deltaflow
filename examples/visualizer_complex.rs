@@ -247,8 +247,8 @@ async fn main() {
     let orders = Pipeline::new("orders")
         .start_with(Receive)
         .then(Validate)
-        .fork_when(|_: &Order| true, "fulfillment").desc("valid")
-        .fork_when(|_: &Order| false, "returns").desc("invalid")  // Would check validation result
+        .fork_when(|result| result.is_ok(), "fulfillment").desc("valid")
+        .fork_when(|result| result.is_err(), "returns").desc("invalid")  // Would check validation result
         .with_recorder(NoopRecorder)
         .build();
 
@@ -261,8 +261,8 @@ async fn main() {
         .start_with(CheckStock)
         .then(Reserve)
         .then(Pack)
-        .fork_when(|_: &Order| true, "shipping").desc("in_stock")
-        .fork_when(|_: &Order| false, "backorder").desc("out_of_stock")  // Would check stock
+        .fork_when(|result| result.is_ok(), "shipping").desc("in_stock")
+        .fork_when(|result| result.is_err(), "backorder").desc("out_of_stock")  // Would check stock
         .with_recorder(NoopRecorder)
         .build();
 
@@ -273,7 +273,7 @@ async fn main() {
     let shipping = Pipeline::new("shipping")
         .start_with(Label)
         .then(Dispatch)
-        .fork_when(|_: &Order| true, "notify").desc("shipped")
+        .fork_when(|result| result.is_ok(), "notify").desc("shipped")
         .with_recorder(NoopRecorder)
         .build();
 
@@ -285,7 +285,7 @@ async fn main() {
     let backorder = Pipeline::new("backorder")
         .start_with(Queue)
         .then(Source)
-        .fork_when(|_: &Order| true, "fulfillment").desc("restocked")  // RETRY CYCLE
+        .fork_when(|result| result.is_ok(), "fulfillment").desc("restocked")  // RETRY CYCLE
         .with_recorder(NoopRecorder)
         .build();
 
@@ -296,7 +296,7 @@ async fn main() {
     let returns = Pipeline::new("returns")
         .start_with(Process)
         .then(Refund)
-        .fork_when(|_: &Order| true, "notify").desc("refunded")
+        .fork_when(|result| result.is_ok(), "notify").desc("refunded")
         .with_recorder(NoopRecorder)
         .build();
 

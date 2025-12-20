@@ -10,7 +10,9 @@ use crate::retry::RetryPolicy;
 use crate::step::{Step, StepError};
 
 /// Type alias for fork predicate functions.
-type ForkPredicate<O> = Arc<dyn Fn(&O) -> bool + Send + Sync>;
+///
+/// Predicates receive the pipeline result, allowing them to check both success and failure cases.
+type ForkPredicate<O> = Arc<dyn Fn(&Result<O, PipelineError>) -> bool + Send + Sync>;
 
 /// Type alias for dynamic spawn generator functions.
 type SpawnGenerator<O> = Arc<dyn Fn(&O) -> Vec<serde_json::Value> + Send + Sync>;
@@ -434,11 +436,12 @@ where
 
     /// Conditionally fork to a target pipeline when predicate returns true.
     ///
+    /// The predicate receives the pipeline result, allowing it to route based on success or failure.
     /// The output is serialized and sent to the target pipeline.
     /// Multiple forks can match - they are not mutually exclusive.
     pub fn fork_when<F>(mut self, predicate: F, target: &'static str) -> Self
     where
-        F: Fn(&O) -> bool + Send + Sync + 'static,
+        F: Fn(&Result<O, PipelineError>) -> bool + Send + Sync + 'static,
     {
         self.spawn_rules.push(SpawnRule::Fork {
             target,
@@ -540,9 +543,11 @@ where
     }
 
     /// Conditionally fork to a target pipeline.
+    ///
+    /// The predicate receives the pipeline result, allowing it to route based on success or failure.
     pub fn fork_when<F>(mut self, predicate: F, target: &'static str) -> ForkBuilder<I, O, Chain>
     where
-        F: Fn(&O) -> bool + Send + Sync + 'static,
+        F: Fn(&Result<O, PipelineError>) -> bool + Send + Sync + 'static,
     {
         self.pipeline.spawn_rules.push(SpawnRule::Fork {
             target,
@@ -676,9 +681,11 @@ where
     }
 
     /// Conditionally fork to a target pipeline.
+    ///
+    /// The predicate receives the pipeline result, allowing it to route based on success or failure.
     pub fn fork_when<F>(mut self, predicate: F, target: &'static str) -> ForkBuilder<I, O, Chain>
     where
-        F: Fn(&O) -> bool + Send + Sync + 'static,
+        F: Fn(&Result<O, PipelineError>) -> bool + Send + Sync + 'static,
     {
         self.pipeline.spawn_rules.push(SpawnRule::Fork {
             target,
@@ -824,9 +831,11 @@ where
     }
 
     /// Conditionally fork to a target pipeline.
+    ///
+    /// The predicate receives the pipeline result, allowing it to route based on success or failure.
     pub fn fork_when<F>(mut self, predicate: F, target: &'static str) -> ForkBuilder<I, O, Chain>
     where
-        F: Fn(&O) -> bool + Send + Sync + 'static,
+        F: Fn(&Result<O, PipelineError>) -> bool + Send + Sync + 'static,
     {
         self.pipeline.spawn_rules.push(SpawnRule::Fork {
             target,
@@ -982,9 +991,11 @@ where
     }
 
     /// Conditionally fork to a target pipeline.
+    ///
+    /// The predicate receives the pipeline result, allowing it to route based on success or failure.
     pub fn fork_when<F>(mut self, predicate: F, target: &'static str) -> ForkBuilder<I, O, Chain>
     where
-        F: Fn(&O) -> bool + Send + Sync + 'static,
+        F: Fn(&Result<O, PipelineError>) -> bool + Send + Sync + 'static,
     {
         self.pipeline.spawn_rules.push(SpawnRule::Fork {
             target,
@@ -1216,8 +1227,15 @@ where
         self.name
     }
 
-    /// Get spawned tasks for the given output.
-    pub fn get_spawned(&self, output: &O) -> Vec<(&'static str, serde_json::Value, Option<std::time::Duration>)> {
+    /// Get spawned tasks for the given pipeline result.
+    ///
+    /// This method evaluates spawn rules against the pipeline result, allowing
+    /// different routing for success vs failure cases.
+    ///
+    /// - Fork predicates receive the full Result and can check success/failure
+    /// - FanOut and Dynamic spawns only execute on Ok results
+    /// - Fork extracts Ok value for serialization
+    pub fn get_spawned_from_result(&self, result: &Result<O, PipelineError>) -> Vec<(&'static str, serde_json::Value, Option<std::time::Duration>)> {
         let mut spawned = Vec::new();
 
         for rule in &self.spawn_rules {
@@ -1225,28 +1243,51 @@ where
                 SpawnRule::Fork {
                     target, predicate, ..
                 } => {
-                    if predicate(output) {
-                        if let Ok(value) = serde_json::to_value(output) {
-                            spawned.push((*target, value, None));
+                    // Fork predicates check against the Result
+                    if predicate(result) {
+                        // Only serialize and spawn if we have an Ok value
+                        if let Ok(output) = result {
+                            if let Ok(value) = serde_json::to_value(output) {
+                                spawned.push((*target, value, None));
+                            }
                         }
                     }
                 }
                 SpawnRule::FanOut { targets, .. } => {
-                    if let Ok(value) = serde_json::to_value(output) {
-                        for target in targets {
-                            spawned.push((*target, value.clone(), None));
+                    // FanOut only runs on success
+                    if let Ok(output) = result {
+                        if let Ok(value) = serde_json::to_value(output) {
+                            for target in targets {
+                                spawned.push((*target, value.clone(), None));
+                            }
                         }
                     }
                 }
                 SpawnRule::Dynamic { target, generator, delay, .. } => {
-                    for input in generator(output) {
-                        spawned.push((*target, input, *delay));
+                    // Dynamic only runs on success
+                    if let Ok(output) = result {
+                        for input in generator(output) {
+                            spawned.push((*target, input, *delay));
+                        }
                     }
                 }
             }
         }
 
         spawned
+    }
+
+    /// Get spawned tasks for the given output.
+    ///
+    /// # Deprecated
+    /// Use `get_spawned_from_result` instead, which receives `Result<O, PipelineError>`
+    /// to allow predicates to handle both success and failure cases.
+    #[deprecated(since = "0.6.0", note = "Use get_spawned_from_result instead")]
+    pub fn get_spawned(&self, output: &O) -> Vec<(&'static str, serde_json::Value, Option<std::time::Duration>)>
+    where
+        O: Clone,
+    {
+        self.get_spawned_from_result(&Ok(output.clone()))
     }
 
     /// Export the pipeline structure as a graph for visualization.

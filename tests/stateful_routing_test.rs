@@ -102,14 +102,14 @@ async fn test_circuit_breaker_pattern() {
         .start_with(PassthroughStep)
         // Route to primary if failures < threshold
         .fork_when(
-            move |_: &DataItem| failure_count_for_predicate.load(Ordering::SeqCst) < threshold,
+            move |result| result.is_ok() && failure_count_for_predicate.load(Ordering::SeqCst) < threshold,
             "primary",
         )
         // Route to fallback if failures >= threshold
         .fork_when(
             {
                 let fc = failure_count.clone();
-                move |_: &DataItem| fc.load(Ordering::SeqCst) >= threshold
+                move |result| result.is_ok() && fc.load(Ordering::SeqCst) >= threshold
             },
             "fallback",
         )
@@ -207,9 +207,11 @@ async fn test_accumulator_routing() {
         .fork_when(
             {
                 let total = running_total.clone();
-                move |item: &DataItem| {
-                    let prev = total.fetch_add(item.value, Ordering::SeqCst);
-                    prev + item.value <= threshold
+                move |result| {
+                    result.as_ref().map_or(false, |item| {
+                        let prev = total.fetch_add(item.value, Ordering::SeqCst);
+                        prev + item.value <= threshold
+                    })
                 }
             },
             "normal",
@@ -217,7 +219,7 @@ async fn test_accumulator_routing() {
         .fork_when(
             {
                 let total = running_total.clone();
-                move |_: &DataItem| total.load(Ordering::SeqCst) > threshold
+                move |result| result.is_ok() && total.load(Ordering::SeqCst) > threshold
             },
             "overflow",
         )
